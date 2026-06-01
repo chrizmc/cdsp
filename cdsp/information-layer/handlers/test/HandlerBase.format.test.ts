@@ -117,7 +117,7 @@ describe("HandlerBase - Format and Root Options", () => {
         format: "flat",
       };
 
-      await handler.get(message, mockWebSocket);
+      await handler.getLegacy(message, mockWebSocket);
 
       expect(capturedMessage).not.toBeNull();
       expect(capturedMessage?.data).toEqual({
@@ -154,7 +154,7 @@ describe("HandlerBase - Format and Root Options", () => {
         format: "flat",
       };
 
-      await handler.get(message, mockWebSocket);
+      await handler.getLegacy(message, mockWebSocket);
 
       expect(capturedMessage).not.toBeNull();
       expect(capturedMessage?.data).toEqual({
@@ -174,7 +174,7 @@ describe("HandlerBase - Format and Root Options", () => {
         format: "nested",
       };
 
-      await handler.get(message, mockWebSocket);
+      await handler.getLegacy(message, mockWebSocket);
 
       expect(capturedMessage).not.toBeNull();
       expect(capturedMessage?.data).toEqual({
@@ -196,7 +196,7 @@ describe("HandlerBase - Format and Root Options", () => {
         format: "nested",
       };
 
-      await handler.get(message, mockWebSocket);
+      await handler.getLegacy(message, mockWebSocket);
 
       expect(capturedMessage).not.toBeNull();
       expect(capturedMessage?.data).toEqual({
@@ -220,7 +220,7 @@ describe("HandlerBase - Format and Root Options", () => {
         format: "flat",
       };
 
-      await handler.get(message, mockWebSocket);
+      await handler.getLegacy(message, mockWebSocket);
 
       expect(capturedMessage).not.toBeNull();
       expect(capturedMessage?.data).toEqual({
@@ -251,7 +251,7 @@ describe("HandlerBase - Format and Root Options", () => {
         format: "flat",
       };
 
-      await handler.get(message, mockWebSocket);
+      await handler.getLegacy(message, mockWebSocket);
 
       expect(capturedMessage).not.toBeNull();
       expect(capturedMessage?.data).toEqual({
@@ -282,7 +282,7 @@ describe("HandlerBase - Format and Root Options", () => {
         format: "nested",
       };
 
-      await handler.get(message, mockWebSocket);
+      await handler.getLegacy(message, mockWebSocket);
 
       expect(capturedMessage).not.toBeNull();
       expect(capturedMessage?.data).toEqual({
@@ -301,7 +301,7 @@ describe("HandlerBase - Format and Root Options", () => {
         format: "nested",
       };
 
-      await handler.get(message, mockWebSocket);
+      await handler.getLegacy(message, mockWebSocket);
 
       expect(capturedMessage).not.toBeNull();
       expect(capturedMessage?.data).toEqual({
@@ -331,7 +331,7 @@ describe("HandlerBase - Format and Root Options", () => {
         format: "flat",
       };
 
-      await handler.get(message, mockWebSocket);
+      await handler.getLegacy(message, mockWebSocket);
 
       expect(capturedMessage).not.toBeNull();
       expect(capturedMessage?.data).toEqual({
@@ -356,7 +356,7 @@ describe("HandlerBase - Format and Root Options", () => {
         format: "flat",
       };
 
-      await handler.get(message, mockWebSocket);
+      await handler.getLegacy(message, mockWebSocket);
 
       expect(capturedMessage).not.toBeNull();
       expect(capturedMessage?.data).toEqual({
@@ -381,7 +381,7 @@ describe("HandlerBase - Format and Root Options", () => {
         format: "nested",
       };
 
-      await handler.get(message, mockWebSocket);
+      await handler.getLegacy(message, mockWebSocket);
 
       expect(capturedMessage).not.toBeNull();
       // Special case: nested + relative for exact match returns value directly
@@ -405,7 +405,7 @@ describe("HandlerBase - Format and Root Options", () => {
         format: "nested",
       };
 
-      await handler.get(message, mockWebSocket);
+      await handler.getLegacy(message, mockWebSocket);
 
       expect(capturedMessage).not.toBeNull();
       expect(capturedMessage?.data).toEqual({

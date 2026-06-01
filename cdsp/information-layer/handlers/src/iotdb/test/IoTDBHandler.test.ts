@@ -1,37 +1,51 @@
-import {IoTDBHandler} from "../src/IoTDBHandler";
-import {Session} from "../src/Session";
-import {SessionDataSet} from "../utils/SessionDataSet";
-import {WebSocketWithId} from "../../../../utils/database-params";
-import {NewMessageType, SetMessageType, STATUS_SUCCESS} from "../../../../router/utils/NewMessage";
-import {SupportedMessageDataTypes} from "../utils/iotdb-constants";
+import { IoTDBHandler } from "../src/IoTDBHandler";
+import { Session } from "../src/Session";
+import { SessionDataSet } from "../utils/SessionDataSet";
+import { WebSocketWithId } from "../../../../utils/database-params";
+import {
+  NewMessageType,
+  SetMessageType,
+  STATUS_SUCCESS,
+} from "../../../../router/utils/NewMessage";
+import { SupportedMessageDataTypes } from "../utils/iotdb-constants";
 
 jest.mock("../src/Session");
 jest.mock("../src/SubscriptionSimulator");
 jest.mock("../utils/database-helper", () => ({
   transformSessionDataSet: jest.fn(() => [
-    [{name: "datapoint", value: 1}], // Mocked data
-    [{name: "metadata", value: 2}]   // Mocked metadata
-  ])
+    [{ name: "datapoint", value: 1 }], // Mocked data
+    [{ name: "metadata", value: 2 }], // Mocked metadata
+  ]),
 }));
 jest.mock("../config/database-params", () => ({
   databaseConfig: {},
-  databaseParams: {VSS: {databaseName: "test_db", dataPointId: "Vehicle_VehicleIdentification_VIN"}}
+  databaseParams: {
+    VSS: {
+      databaseName: "test_db",
+      dataPointId: "Vehicle_VehicleIdentification_VIN",
+    },
+  },
 }));
 
 describe("IoTDBHandler", () => {
   let handler: IoTDBHandler;
   let mockSession: jest.Mocked<Session>;
   let mockWebSocket: jest.Mocked<WebSocketWithId>;
+  let mockSendMessage: jest.Mock;
 
   beforeEach(() => {
     mockSession = new Session() as jest.Mocked<Session>;
     mockSession.authenticateAndConnect = jest.fn();
     mockSession.executeQueryStatement = jest.fn();
+    mockSession.getSessionId = jest.fn().mockReturnValue("mockSessionId");
 
-    handler = new IoTDBHandler(function(p1: WebSocketWithId,p2: any){});
-    (handler as any).session = mockSession; // Inject mocked session
-    mockWebSocket = {id: "test-socket"} as jest.Mocked<WebSocketWithId>;
-    handler["sendMessageToClient"] = jest.fn();
+    mockSendMessage = jest.fn();
+    handler = new IoTDBHandler(mockSendMessage);
+
+    // inject mocked session used by handler internals
+    (handler as any).session = mockSession;
+
+    mockWebSocket = { id: "test-socket" } as jest.Mocked<WebSocketWithId>;
   });
 
   test("should authenticate and connect to IoTDB", async () => {
@@ -42,7 +56,10 @@ describe("IoTDBHandler", () => {
   test("should query data points and metadata from IoTDB", async () => {
     const mockDataPoints = ["Temperature", "Speed"];
     const vin = "TEST_VIN";
-    mockSession.executeQueryStatement.mockResolvedValueOnce(new SessionDataSet([], [], {}, 0, {}, 0, {}, {}, false));
+
+    mockSession.executeQueryStatement.mockResolvedValue(
+      new SessionDataSet([], [], {}, 0, {}, 0, {}, {}, false),
+    );
 
     const result = await handler.getDataPointsFromDB(mockDataPoints, vin);
 
@@ -52,8 +69,9 @@ describe("IoTDBHandler", () => {
     ];
 
     expectedCalls.forEach((expected, index) => {
-      // expect(mockExecuteQueryStatement.mock.calls[index][0]).toEqual(expected);
-      expect(mockSession.executeQueryStatement.mock.calls[index][0]).toEqual(expected);
+      expect(mockSession.executeQueryStatement.mock.calls[index][0]).toEqual(
+        expected,
+      );
     });
     // Ensure the metadata timeseries have been requested together with the data points
     expect(result.success).toBe(true);
@@ -65,38 +83,43 @@ describe("IoTDBHandler", () => {
       instance: "TEST_VIN",
       path: "Vehicle",
       requestId: "requestId",
-      data: {Speed: 60, Temperature: 42.42},
-      metadata: {Speed: {unit: "km/h"}},
+      data: { Speed: 60, Temperature: 42.42 },
+      metadata: { Speed: { unit: "km/h" } },
     };
-    (handler as any).dataPointsSchema = {
-      "Vehicle_Speed": SupportedMessageDataTypes.int16,
-      "Vehicle_Temperature": SupportedMessageDataTypes.float,
-      "Vehicle_VehicleIdentification_VIN": SupportedMessageDataTypes.string
-    };
-    mockSession.getSessionId = jest.fn().mockReturnValue("mockSessionId");
-    mockSession.getClient = jest.fn().mockReturnValue({
-      insertRecord: jest.fn().mockResolvedValue({status: 200}),
-    });
 
+    (handler as any).dataPointsSchema = {
+      Vehicle_Speed: SupportedMessageDataTypes.int16,
+      Vehicle_Temperature: SupportedMessageDataTypes.float,
+      Vehicle_VehicleIdentification_VIN: SupportedMessageDataTypes.string,
+    };
+
+    const insertRecordMock = jest.fn().mockResolvedValue({ status: 200 });
+    mockSession.getClient = jest.fn().mockReturnValue({
+      insertRecord: insertRecordMock,
+    } as any);
+
+    // re-inject session (important after adapter-bound setup paths)
+    (handler as any).session = mockSession;
+
+    // call the public operation entrypoint
     await (handler as any).set(mockSetMessage, mockWebSocket);
 
-    expect(mockSession.getClient().insertRecord).toHaveBeenCalled();
-    expect(handler["sendMessageToClient"]).toHaveBeenCalled();
-    expect(handler["sendMessageToClient"]).toHaveBeenCalledWith(
+    expect(insertRecordMock).toHaveBeenCalled();
+
+    expect(mockSendMessage).toHaveBeenCalledWith(
       mockWebSocket,
-      expect.objectContaining({code: STATUS_SUCCESS.OK})
+      expect.objectContaining({ code: STATUS_SUCCESS.OK }),
     );
 
-    // Ensure metadata is added for Speed only
-    expect(mockSession.getClient().insertRecord).toHaveBeenCalledWith(
+    expect(insertRecordMock).toHaveBeenCalledWith(
       expect.objectContaining({
         measurements: [
           "Vehicle_Speed",
           "Vehicle_Temperature",
           "Vehicle_VehicleIdentification_VIN",
-          "Vehicle_Speed_Metadata"
+          "Vehicle_Speed_Metadata",
         ],
-      })
+      }),
     );
   });
 
@@ -107,15 +130,14 @@ describe("IoTDBHandler", () => {
       path: "Vehicle.Speed",
       requestId: "requestId",
       data: {},
-      metadata: {VIN: "123456", Unit: "km/h"}
+      metadata: { VIN: "123456", Unit: "km/h" },
     };
 
     const result = (handler as any).extractNodesFromMetadata(mockMessage);
 
     expect(result).toEqual({
       "Vehicle.Speed_VIN_Metadata": JSON.stringify("123456"),
-      "Vehicle.Speed_Unit_Metadata": JSON.stringify("km/h")
+      "Vehicle.Speed_Unit_Metadata": JSON.stringify("km/h"),
     });
   });
-
 });

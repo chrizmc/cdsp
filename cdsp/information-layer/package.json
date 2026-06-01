@@ -15,6 +15,7 @@
     "test": "jest"
   },
   "dependencies": {
+    "@iotdb/client": "github:apache/iotdb-client-nodejs#2bd256f97077b0c5a86adb0e96cdc7d9097ba432",
     "ajv": "^8.17.1",
     "ajv-errors": "^3.0.0",
     "ajv-formats": "^3.0.1",

@@ -17,6 +17,7 @@ export enum LogMessageType {
   SENT = "SENT",
   ERROR = "ERROR",
   WARNING = "WARNING",
+  DEBUG = "DEBUG",
   OTHER = "OTHER",
 }
 
@@ -26,6 +27,7 @@ const MessageTypeColors: Record<LogMessageType, COLORS> = {
   [LogMessageType.SENT]: COLORS.BLUE,
   [LogMessageType.ERROR]: COLORS.RED,
   [LogMessageType.WARNING]: COLORS.YELLOW,
+  [LogMessageType.DEBUG]: COLORS.ORANGE,
   [LogMessageType.OTHER]: COLORS.PALE_WHITE,
 };
 
@@ -50,7 +52,7 @@ export function logWithColor(message: string, color: COLORS): void {
 export function logMessage(
   featureStr: string,
   type: LogMessageType = LogMessageType.OTHER,
-  label: string = ""
+  label: string = "",
 ): void {
   let color: COLORS = MessageTypeColors[type];
   const dateTimeNow = new Date().toISOString();
@@ -66,6 +68,12 @@ export function logMessage(
     case LogMessageType.ERROR:
       labelText = "\u2716 ".concat(label || "Internal Error");
       break;
+    case LogMessageType.WARNING:
+      labelText = "\u26A0 ".concat(label || "Warning");
+      break;
+    case LogMessageType.DEBUG:
+      labelText = "\u2699 ".concat(label || "Debug");
+      break;
     case LogMessageType.OTHER:
       labelText = label || "Message";
       color = COLORS.RESET;
@@ -76,7 +84,7 @@ export function logMessage(
   }
 
   const logEntry = `\n${COLORS.PALE_WHITE}${dateTimeNow}${COLORS.RESET} ${color}${labelText}${COLORS.RESET}`;
-  if (process.env.NODE_ENV !== 'test') {
+  if (process.env.NODE_ENV !== "test") {
     console.log(logEntry);
     console.log(featureStr);
   }
