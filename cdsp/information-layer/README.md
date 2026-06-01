@@ -1,14 +1,15 @@
 # Information Layer Server (IL)
 
-The information layer Server (IL) is responsible for providing a raw data access [API](#access-information-layer-server-api) (read, write, subscribe).
-Its intention is to abstract the underlying data storage database technology. It is written in Typescript.
+The Information Layer Server (IL) provides a raw data access API for **read**, **write**, and **subscribe** operations.
 
-Clients can interact with it using websockets and JSON payload.
+Its purpose is to abstract the underlying database technology. It is written in TypeScript.
+
+Clients can interact with it using WebSockets and JSON payloads.
 
 The IL consists of two logical components:
 
-- database handler: Interaction with the chosen database (`iotdb` in current implementation)
-- router: API provider that connects to the database handler
+- **Database handler**: interacts with the configured database
+- **Router**: API provider that connects to the database handler
 
 ```mermaid
 flowchart LR
@@ -41,89 +42,166 @@ The examples below follow these rules directly so they work out of the box with 
 
 # Information Layer Server - Hello World Setup
 
-### Build the typescript application natively
+## Prerequisites
 
-Make sure all libraries are installed
+Before running `npm install` or building the application, install the IoTDB Node.js client dependency manually.
+
+The Information Layer requires the Apache IoTDB Node.js client to install and build successfully.
+
+During validation, we found packaging inconsistencies in the Node.js client:
+
+- Apache docs/repo reference `@iotdb/client`
+- `@iotdb/client` was not directly installable from npm in our environment
+- `iotdb-client-nodejs` was installable, but it did not match our setup/export needs
+
+Temporary workaround used in this project:
+
+1. Install the client from the Apache GitHub repository at a known commit
+2. Build the package locally in `node_modules/@iotdb/client`
+
+Upstream tracking issue:
+
+- https://github.com/apache/iotdb-client-nodejs/issues/9
+
+Install the dependency from GitHub:
+
+```bash
+npm install git+https://github.com/apache/iotdb-client-nodejs.git#2bd256f97077b0c5a86adb0e96cdc7d9097ba432
+```
+
+Build the dependency:
+
+```bash
+cd node_modules/@iotdb/client
+npm install
+npm run build
+```
+
+> [!WARNING]
+> This is a temporary workaround for IoTDB client packaging issues.
+> A clean published package flow is preferred long-term.
+
+## Build the TypeScript application natively
+
+Make sure all libraries are installed:
 
 ```bash
 npm install
 ```
 
-Build the application
+Build the application:
 
 ```bash
 npm run build
 ```
 
-Run the unit tests
+Run the unit tests:
 
 ```bash
 npx jest
 ```
 
-or
+or:
 
 ```bash
 npx jest --verbose
 ```
 
-## Run IL with IotDB: Timeseries Data Server IoTDB
+## Run IL with IoTDB: Timeseries Data Server
 
 ### Start the database
 
-Start the db:
+Start IoTDB:
 
 ```bash
 docker run -d --rm --name iotdb-service -p 6667:6667 -p 9003:9003 apache/iotdb:latest
 ```
 
-if you plan on running the Information Layer also with docker, IotDB and IL container need to be in the same network:
+If you plan to run the Information Layer with Docker, the IoTDB and IL containers need to be in the same network:
 
 ```bash
 docker network create cdsp-net
 docker run -d --rm --name iotdb-service --network cdsp-net -p 6667:6667 -p 9003:9003 apache/iotdb:latest
 ```
 
-Connect to it via cli to create or view the data (optional):
+Connect to it via CLI to create or view the data (optional):
 
 ```bash
 docker exec -it iotdb ./start-cli.sh -h 127.0.0.1 -p 6667 -u root -pw root
 ```
 
-Create a database (recommended)
+Create a database (recommended):
 
 ```bash
 create database root.Vehicles
 ```
 
-Create desired timeseries (optional)
+Create desired timeseries (optional):
 
 ```bash
 create timeseries root.Vehicles.Vehicle_TraveledDistance WITH DATATYPE=FLOAT, ENCODING=RLE
 create timeseries root.Vehicles.Vehicle_Speed WITH DATATYPE=FLOAT, ENCODING=RLE
 ```
 
-### Start Information Layer Server
+# Start Information Layer Server
 
-Build the Information Layer image
+Build the Information Layer image:
 
 ```bash
 docker build -t information-layer .
 ```
 
-Run IL
+> [!WARNING] Temporary workaround for IoTDB client packaging issues:
+> Actually the Dockerfile has a workaround to build the IoTDB client locally due to packaging issues. If those are resolved, the build steps can be simplified and the workaround removed.
+
+Run IL:
 
 ```bash
 # Docker
 docker run --rm --name information-layer --network cdsp-net -p 8080:8080 -e HANDLER_TYPE=iotdb -e IOTDB_HOST=iotdb-service information-layer
+
 # OR natively
 npm install
 HANDLER_TYPE=iotdb IOTDB_HOST=localhost npm start
 ```
 
+## IoTDB Node.js client smoke tests
+
+Smoke tests are located in:
+
+- `handlers/src/iotdb/spikes/iotdb-import-smoke.mjs`
+- `handlers/src/iotdb/spikes/iotdb-client-smoke.ts`
+
+#### Import smoke
+
+Run:
+
+```bash
+node handlers/src/iotdb/spikes/iotdb-import-smoke.mjs
+```
+
+Expected:
+
+- `@iotdb/client` imports successfully
+- export list includes `Session`
+
+#### Session/query smoke
+
+Run:
+
+```bash
+npx ts-node handlers/src/iotdb/spikes/iotdb-client-smoke.ts
+```
+
+Expected:
+
+- session opens
+- `SHOW DATABASES` executes
+- session closes successfully
+
 # Access Information Layer Server API
 
-Connect your own websocket client by connecting to `ws://localhost:8080`.
+Connect your own WebSocket client by connecting to `ws://localhost:8080`.
 
 The examples use [websocat](https://github.com/vi/websocat) and [jq](https://github.com/jqlang/jq)
 
@@ -155,38 +233,47 @@ Mapping rule used by IL:
 
 Request patterns:
 
-```jsonc
-// 1) Get all data points below schema root
+```json
 {
-  "jsonrpc": "2.0", // JSON-RPC protocol version
-  "method": "get", // read values
-  "id": "123-456", // any string/number chosen by client
-  "params": { // request parameters
-    "instance": "VIN_123", // required; any non-empty text, read/write/subscribe are scoped to this exact value
-    "schema": "Vehicle", // required schema name from supported schema file
-    "format": "nested", // optional: nested | flat
-    "root": "relative" // optional: relative | absolute (relative = shorter paths from requested scope, absolute = full paths)
+  "jsonrpc": "2.0",
+  "method": "get",
+  "id": "123-456", # this can be any string or number, it is used to match the response with the request
+  "params": {
+    "instance": "VIN_123",
+    "schema": "Vehicle",
+    "format": "nested",
+    "root": "relative"
   }
 }
+```
 
-// 2) Get multiple values under a non-leaf path
+- `format` is optional and can be `"nested"` or `"flat"`. Default: `"nested"`
+- `root` is optional and can be `"relative"` or `"absolute"`. Default: `"relative"`
+
+With path to a non-leaf node to get multiple data points below this node:
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "get",
+  "id": "123-456",
+  "params": {
+    "instance": "VIN_123",
+    "schema": "Vehicle",
+    "path": "CurrentLocation"
+  }
+}
+```
+
+With path to a leaf node to get one data point:
+
+```json
 {
   "jsonrpc": "2.0", // JSON-RPC protocol version
   "method": "get", // read values
   "id": "123-456", // client request ID
-  "params": { // request parameters
-    "instance": "VIN_123", // required; same text must be used to read this instance later
-    "schema": "Vehicle", // required schema name
-    "path": "CurrentLocation" // optional: select only this subtree under schema
-  }
-}
-
-// 3) Get one specific leaf value
-{
-  "jsonrpc": "2.0", // JSON-RPC protocol version
-  "method": "get", // read values
-  "id": "123-456", // client request ID
-  "params": { // request parameters
+  "params": {
+    // request parameters
     "instance": "VIN_123", // required instance value
     "schema": "Vehicle", // required schema name
     "path": "CurrentLocation.Latitude" // optional: one concrete leaf signal
@@ -204,30 +291,36 @@ echo '{"jsonrpc":"2.0","method":"get","id":"123-456","params":{"instance":"VIN_1
 
 Request patterns:
 
-```jsonc
-// 1) Set one leaf value
+```json
 {
   "jsonrpc": "2.0", // JSON-RPC protocol version
   "method": "set", // write values
   "id": "123-456", // client request ID
-  "params": { // request parameters
+  "params": {
+    // request parameters
     "instance": "VIN_123", // required; any non-empty text (you can choose it), writes are stored under this instance value
     "schema": "Vehicle", // required schema name
     "path": "CurrentLocation.Latitude", // optional: write this single leaf signal
     "data": 21 // required set payload (leaf scalar)
   }
 }
+```
 
-// 2) Set multiple values at schema root (mixed nested/flat keys)
+Root node with multiple values in data, nested and flat (no path provided):
+
+```json
 {
   "jsonrpc": "2.0", // JSON-RPC protocol version
   "method": "set", // write values
   "id": "123-456", // client request ID
-  "params": { // request parameters
+  "params": {
+    // request parameters
     "instance": "VIN_123", // required instance value
     "schema": "Vehicle", // required schema name
-    "data": { // required set payload (root object)
-      "CurrentLocation": { // nested object key
+    "data": {
+      // required set payload (root object)
+      "CurrentLocation": {
+        // nested object key
         "Latitude": 22, // leaf value
         "Longitude": 46 // leaf value
       }, // end nested object
@@ -235,17 +328,22 @@ Request patterns:
     } // end data
   }
 }
+```
 
-// 3) Set multiple values under a non-leaf path
+Non-leaf node with multiple values in data:
+
+```json
 {
   "jsonrpc": "2.0", // JSON-RPC protocol version
   "method": "set", // write values
   "id": "123-456", // client request ID
-  "params": { // request parameters
+  "params": {
+    // request parameters
     "instance": "VIN_123", // required instance value
     "schema": "Vehicle", // required schema name
     "path": "CurrentLocation", // optional: write this subtree only
-    "data": { // required set payload (subtree object)
+    "data": {
+      // required set payload (subtree object)
       "Latitude": 22, // leaf value
       "Longitude": 46 // leaf value
     } // end data
@@ -259,7 +357,9 @@ Example:
 echo '{"jsonrpc":"2.0","method":"set","id":"123-456","params":{"instance":"VIN_123","schema":"Vehicle","path":"CurrentLocation.Latitude","data":22}}' | websocat ws://localhost:8080 -n1 | jq
 ```
 
-```yaml
+Expected response:
+
+```json
 { "jsonrpc": "2.0", "id": "123-456", "result": {} }
 ```
 
@@ -267,20 +367,23 @@ echo '{"jsonrpc":"2.0","method":"set","id":"123-456","params":{"instance":"VIN_1
 
 Request:
 
-```jsonc
+```json
 {
-  "jsonrpc": "2.0", // JSON-RPC protocol version
-  "method": "subscribe", // start subscription
-  "id": "123-456", // client request ID
-  "params": { // request parameters
-    "instance": "VIN_123", // required; any non-empty text, subscription is bound to this exact instance value
-    "schema": "Vehicle", // required schema name
-    "path": "CurrentLocation", // optional: if omitted, subscribes from schema root
-    "format": "nested", // optional: nested | flat
-    "root": "relative" // optional: relative | absolute (if omitted: absolute; absolute includes full schema path)
+  "jsonrpc": "2.0",
+  "method": "subscribe",
+  "id": "123-456",
+  "params": {
+    "instance": "VIN_123",
+    "schema": "Vehicle"
   }
 }
 ```
+
+- `path` is optional. If not provided, it subscribes to the root node of the schema
+- `format` is optional and can be `"nested"` or `"flat"`. Default: `"nested"`
+- `root` is optional and can be `"relative"` or `"absolute"`. Default: `"relative"`
+
+Example:
 
 ```bash
 echo '{"jsonrpc":"2.0","method":"subscribe","id":"123-456","params":{"instance":"VIN_123","schema":"Vehicle"}}' | websocat ws://localhost:8080 -n | jq
@@ -288,21 +391,20 @@ echo '{"jsonrpc":"2.0","method":"subscribe","id":"123-456","params":{"instance":
 
 On success:
 
-```yaml
+```json
 { "jsonrpc": "2.0", "id": "123-456", "result": {} }
 ```
 
 ## Unsubscribe
 
-```jsonc
+```json
 {
-  "jsonrpc": "2.0", // JSON-RPC protocol version
-  "method": "unsubscribe", // stop subscription
-  "id": "123-456", // client request ID
-  "params": { // request parameters
-    "instance": "VIN_123", // required; must match the subscribed instance value
-    "schema": "Vehicle", // required schema name
-    "path": "CurrentLocation" // include path if your subscribe used path
+  "jsonrpc": "2.0",
+  "method": "unsubscribe",
+  "id": "123-456",
+  "params": {
+    "instance": "VIN_123",
+    "schema": "Vehicle"
   }
 }
 ```
@@ -312,7 +414,7 @@ On success:
 
 On success:
 
-```yaml
+```json
 { "jsonrpc": "2.0", "id": "123-456", "result": {} }
 ```
 
