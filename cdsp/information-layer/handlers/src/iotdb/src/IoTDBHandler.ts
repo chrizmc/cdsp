@@ -37,11 +37,10 @@ import {
   replaceUnderscoresWithDots,
 } from "../../../utils/transformations";
 import { IoTDBOperationAdapter } from "./adapters/IoTDBOperationAdapter";
-import {
-  LegacyIoTDBAdapter,
-  LegacyIoTDBPort,
-} from "./adapters/LegacyIoTDBAdapter";
+import { LegacyIoTDBAdapter } from "./adapters/LegacyIoTDBAdapter";
+import { IoTDBHandlerPort } from "./adapters/IoTDBHandlerPort";
 import { NewIoTDBAdapter } from "./adapters/NewIoTDBAdapter";
+import { NewIoTDBSession } from "./NewIoTDBSession";
 import {
   getGetOperationPath,
   getSetOperationPath,
@@ -51,12 +50,13 @@ import {
 import { logMessage, LogMessageType } from "../../../../utils/logger";
 import { TSInsertRecordReq } from "../gen-nodejs/client_types";
 
-export class IoTDBHandler extends HandlerBase implements LegacyIoTDBPort {
+export class IoTDBHandler extends HandlerBase implements IoTDBHandlerPort {
   private session: Session;
   private subscriptionSimulator: SubscriptionSimulator;
   private dataPointsSchema: SupportedDataPoints = {};
   private legacyAdapter: IoTDBOperationAdapter;
   private newAdapter: IoTDBOperationAdapter;
+  private newSession: NewIoTDBSession;
 
   constructor(
     sendMessage: (
@@ -78,7 +78,8 @@ export class IoTDBHandler extends HandlerBase implements LegacyIoTDBPort {
     );
 
     this.legacyAdapter = new LegacyIoTDBAdapter(this);
-    this.newAdapter = new NewIoTDBAdapter();
+    this.newAdapter = new NewIoTDBAdapter(this);
+    this.newSession = new NewIoTDBSession();
   }
 
   private selectGetAdapter(): IoTDBOperationAdapter {
@@ -173,6 +174,60 @@ export class IoTDBHandler extends HandlerBase implements LegacyIoTDBPort {
     return super.getLegacy(message, ws);
   }
 
+  public async getNewClient(
+    message: GetMessageType,
+    ws: WebSocketWithId,
+  ): Promise<void> {
+    if (!this.newSession.isOpen()) {
+      try {
+        await this.newSession.open();
+      } catch (err) {
+        logMessage(
+          `NewIoTDBSession.open failed, cannot serve new-client get: ${err}`,
+          LogMessageType.DEBUG,
+        );
+        this.sendGetResponseToClient(
+          { success: false, error: "New session unavailable" },
+          message.instance,
+          [],
+          ws,
+          message.requestId,
+          message.path,
+          message.root,
+          message.format,
+        );
+        return;
+      }
+    }
+
+    const requestedDataPoints = this.getKnownDatapointsByPrefix(message.path);
+
+    if (requestedDataPoints.length === 0) {
+      this.sendRequestedDataPointsNotFoundErrorMsg(
+        ws,
+        message.path,
+        message.requestId,
+      );
+      return;
+    }
+
+    const queryResult = await this.newSession.getDataPoints(
+      requestedDataPoints,
+      message.instance,
+    );
+
+    this.sendGetResponseToClient(
+      queryResult,
+      message.instance,
+      requestedDataPoints,
+      ws,
+      message.requestId,
+      message.path,
+      message.root,
+      message.format,
+    );
+  }
+
   public subscribeLegacy(
     message: SubscribeMessageType,
     ws: WebSocketWithId,
@@ -211,9 +266,10 @@ export class IoTDBHandler extends HandlerBase implements LegacyIoTDBPort {
   async unsubscribe_client(ws: WebSocketWithId): Promise<void> {
     this.subscriptionSimulator.unsubscribeClient(ws);
     await this.session.closeSession();
+    await this.newSession.close();
   }
 
-  public async setLegacy(
+  public async setNewClient(
     message: SetMessageType,
     ws: WebSocketWithId,
   ): Promise<void> {
@@ -224,9 +280,9 @@ export class IoTDBHandler extends HandlerBase implements LegacyIoTDBPort {
           ...this.extractNodesFromMessageWithVinAsNode(message),
           ...this.extractNodesFromMetadata(message),
         };
-        let measurements: string[] = [];
-        let dataTypes: string[] = [];
-        let values: any[] = [];
+        const measurements: string[] = [];
+        const dataTypes: string[] = [];
+        const values: unknown[] = [];
 
         for (const [key, value] of Object.entries(data)) {
           measurements.push(key);
@@ -235,16 +291,22 @@ export class IoTDBHandler extends HandlerBase implements LegacyIoTDBPort {
         }
 
         const deviceId = databaseParams["VSS"].databaseName;
-        const status = await this.insertRecord(
+        const writeResult = await this.newSession.setDataPoints(
           deviceId,
           measurements,
           dataTypes,
           values,
         );
 
+        if (!writeResult.success) {
+          throw new Error(writeResult.error ?? "Unknown database error");
+        }
+
         logWithColor(
           `Record inserted to device ${deviceId},
-            status code: `.concat(JSON.stringify(status)),
+      status code: `.concat(
+            JSON.stringify(writeResult.status ?? { code: 200 }),
+          ),
           COLORS.GREY,
         );
 
@@ -266,9 +328,16 @@ export class IoTDBHandler extends HandlerBase implements LegacyIoTDBPort {
     }
   }
 
+  public async setLegacy(
+    message: SetMessageType,
+    ws: WebSocketWithId,
+  ): Promise<void> {
+    return this.setNewClient(message, ws);
+  }
+
   private extractNodesFromMetadata(
     message: SetMessageType,
-  ): Record<string, any> {
+  ): Record<string, unknown> {
     if (!message.metadata) return {};
 
     return Object.fromEntries(
@@ -284,7 +353,7 @@ export class IoTDBHandler extends HandlerBase implements LegacyIoTDBPort {
 
   private getDataType(dataPointName: string) {
     if (dataPointName.endsWith(METADATA_SUFFIX)) {
-      let dataPoint = removeSuffixFromString(dataPointName, METADATA_SUFFIX);
+      const dataPoint = removeSuffixFromString(dataPointName, METADATA_SUFFIX);
       if (this.dataPointsSchema.hasOwnProperty(dataPoint)) {
         return SupportedMessageDataTypes.string;
       } else {
