@@ -393,7 +393,7 @@ export abstract class HandlerBase {
 
   protected extractNodesFromMessageWithVinAsNode(
     message: SetMessageType,
-  ): Record<string, any> {
+  ): Record<string, unknown> {
     const result = this.extractNodesFromMessage(message);
     const { dataPointId } = databaseParams["VSS"];
     result[dataPointId] = message.instance;
@@ -404,7 +404,7 @@ export abstract class HandlerBase {
 export type QueryResult =
   | {
       success: true;
-      dataPoints: Array<{ name: string; value: any }>;
-      metadata: Array<{ name: string; value: any }>;
+      dataPoints: Array<{ name: string; value: unknown }>;
+      metadata: Array<{ name: string; value: unknown }>;
     }
   | { success: false; error: string };

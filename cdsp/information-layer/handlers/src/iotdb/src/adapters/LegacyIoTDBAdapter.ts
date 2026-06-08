@@ -6,36 +6,30 @@ import {
 } from "../../../../../router/utils/NewMessage";
 import { WebSocketWithId } from "../../../../../utils/database-params";
 import { IoTDBOperationAdapter } from "./IoTDBOperationAdapter";
-
-export interface LegacyIoTDBPort {
-  getLegacy(message: GetMessageType, ws: WebSocketWithId): Promise<void>;
-  setLegacy(message: SetMessageType, ws: WebSocketWithId): Promise<void>;
-  subscribeLegacy(message: SubscribeMessageType, ws: WebSocketWithId): void;
-  unsubscribeLegacy(message: UnsubscribeMessageType, ws: WebSocketWithId): void;
-}
+import { IoTDBHandlerPort } from "./IoTDBHandlerPort";
 
 export class LegacyIoTDBAdapter implements IoTDBOperationAdapter {
-  constructor(private readonly legacy: LegacyIoTDBPort) {}
+  constructor(private readonly handler: IoTDBHandlerPort) {}
 
   async get(message: GetMessageType, ws: WebSocketWithId): Promise<void> {
-    return this.legacy.getLegacy(message, ws);
+    return this.handler.getLegacy(message, ws);
   }
 
   async set(message: SetMessageType, ws: WebSocketWithId): Promise<void> {
-    return this.legacy.setLegacy(message, ws);
+    return this.handler.setLegacy(message, ws);
   }
 
   async subscribe(
     message: SubscribeMessageType,
     ws: WebSocketWithId,
   ): Promise<void> {
-    this.legacy.subscribeLegacy(message, ws);
+    this.handler.subscribeLegacy(message, ws);
   }
 
   async unsubscribe(
     message: UnsubscribeMessageType,
     ws: WebSocketWithId,
   ): Promise<void> {
-    this.legacy.unsubscribeLegacy(message, ws);
+    this.handler.unsubscribeLegacy(message, ws);
   }
 }
