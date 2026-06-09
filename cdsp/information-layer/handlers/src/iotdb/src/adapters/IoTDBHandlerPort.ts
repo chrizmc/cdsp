@@ -12,5 +12,13 @@ export interface IoTDBHandlerPort {
   setLegacy(message: SetMessageType, ws: WebSocketWithId): Promise<void>;
   setNewClient(message: SetMessageType, ws: WebSocketWithId): Promise<void>;
   subscribeLegacy(message: SubscribeMessageType, ws: WebSocketWithId): void;
+  subscribeNewClient(
+    message: SubscribeMessageType,
+    ws: WebSocketWithId,
+  ): Promise<void>;
   unsubscribeLegacy(message: UnsubscribeMessageType, ws: WebSocketWithId): void;
+  unsubscribeNewClient(
+    message: UnsubscribeMessageType,
+    ws: WebSocketWithId,
+  ): Promise<void>;
 }

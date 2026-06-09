@@ -167,6 +167,12 @@ export class IoTDBHandler extends HandlerBase implements IoTDBHandlerPort {
     return this.selectUnsubscribeAdapter().unsubscribe(message, ws);
   }
 
+  async unsubscribe_client(ws: WebSocketWithId): Promise<void> {
+    this.subscriptionSimulator.unsubscribeClient(ws);
+    await this.session.closeSession();
+    await this.newSession.close();
+  }
+
   public async getLegacy(
     message: GetMessageType,
     ws: WebSocketWithId,
@@ -228,45 +234,57 @@ export class IoTDBHandler extends HandlerBase implements IoTDBHandlerPort {
     );
   }
 
-  public subscribeLegacy(
-    message: SubscribeMessageType,
+  public async setLegacy(
+    message: SetMessageType,
     ws: WebSocketWithId,
-  ): void {
-    const newDataPoints = this.getKnownDatapointsByPrefix(message.path);
+  ): Promise<void> {
+    if (this.areNodesValid(message, ws)) {
+      let statusMessage: StatusMessage | ErrorMessage;
+      try {
+        const data = {
+          ...this.extractNodesFromMessageWithVinAsNode(message),
+          ...this.extractNodesFromMetadata(message),
+        };
+        let measurements: string[] = [];
+        let dataTypes: string[] = [];
+        let values: any[] = [];
 
-    if (newDataPoints.length === 0) {
-      this.sendRequestedDataPointsNotFoundErrorMsg(
-        ws,
-        message.path,
-        message.requestId,
-      );
-      return;
+        for (const [key, value] of Object.entries(data)) {
+          measurements.push(key);
+          dataTypes.push(this.getDataType(key));
+          values.push(value);
+        }
+
+        const deviceId = databaseParams["VSS"].databaseName;
+        const status = await this.insertRecord(
+          deviceId,
+          measurements,
+          dataTypes,
+          values,
+        );
+
+        logWithColor(
+          `Record inserted to device ${deviceId},
+            status code: `.concat(JSON.stringify(status)),
+          COLORS.GREY,
+        );
+
+        statusMessage = this.createStatusMessage(
+          STATUS_SUCCESS.OK,
+          "Successfully wrote data to database.",
+          message.requestId,
+        );
+      } catch (error: unknown) {
+        const errMsg = error instanceof Error ? error.message : "Unknown error";
+        statusMessage = this.createErrorMessage(
+          STATUS_ERRORS.SERVICE_UNAVAILABLE,
+          `Database service unavailable`,
+          `Failed writing data. ${errMsg}`,
+          message.requestId,
+        );
+      }
+      this.sendMessageToClient(ws, statusMessage);
     }
-
-    void this.subscriptionSimulator.subscribe(message, ws, newDataPoints);
-  }
-
-  public unsubscribeLegacy(
-    message: UnsubscribeMessageType,
-    ws: WebSocketWithId,
-  ): void {
-    const dataPointsToUnsub = this.getKnownDatapointsByPrefix(message.path);
-    if (dataPointsToUnsub.length === 0) {
-      this.sendRequestedDataPointsNotFoundErrorMsg(
-        ws,
-        message.path,
-        message.requestId,
-      );
-      return;
-    }
-
-    this.subscriptionSimulator.unsubscribe(message, ws, dataPointsToUnsub);
-  }
-
-  async unsubscribe_client(ws: WebSocketWithId): Promise<void> {
-    this.subscriptionSimulator.unsubscribeClient(ws);
-    await this.session.closeSession();
-    await this.newSession.close();
   }
 
   public async setNewClient(
@@ -328,11 +346,85 @@ export class IoTDBHandler extends HandlerBase implements IoTDBHandlerPort {
     }
   }
 
-  public async setLegacy(
-    message: SetMessageType,
+  public subscribeLegacy(
+    message: SubscribeMessageType,
+    ws: WebSocketWithId,
+  ): void {
+    const newDataPoints = this.getKnownDatapointsByPrefix(message.path);
+
+    if (newDataPoints.length === 0) {
+      this.sendRequestedDataPointsNotFoundErrorMsg(
+        ws,
+        message.path,
+        message.requestId,
+      );
+      return;
+    }
+
+    void this.subscriptionSimulator.subscribe(message, ws, newDataPoints);
+  }
+
+  public async subscribeNewClient(
+    message: SubscribeMessageType,
     ws: WebSocketWithId,
   ): Promise<void> {
-    return this.setNewClient(message, ws);
+    const newDataPoints = this.getKnownDatapointsByPrefix(message.path);
+
+    if (newDataPoints.length === 0) {
+      this.sendRequestedDataPointsNotFoundErrorMsg(
+        ws,
+        message.path,
+        message.requestId,
+      );
+      return;
+    }
+
+    await this.newSession.subscribeDataPoints(
+      message,
+      ws,
+      newDataPoints,
+      this.subscriptionSimulator.subscribe.bind(this.subscriptionSimulator),
+    );
+  }
+
+  public unsubscribeLegacy(
+    message: UnsubscribeMessageType,
+    ws: WebSocketWithId,
+  ): void {
+    const dataPointsToUnsub = this.getKnownDatapointsByPrefix(message.path);
+    if (dataPointsToUnsub.length === 0) {
+      this.sendRequestedDataPointsNotFoundErrorMsg(
+        ws,
+        message.path,
+        message.requestId,
+      );
+      return;
+    }
+
+    this.subscriptionSimulator.unsubscribe(message, ws, dataPointsToUnsub);
+  }
+
+  public async unsubscribeNewClient(
+    message: UnsubscribeMessageType,
+    ws: WebSocketWithId,
+  ): Promise<void> {
+    const dataPointsToUnsub = this.getKnownDatapointsByPrefix(message.path);
+
+    if (dataPointsToUnsub.length === 0) {
+      this.sendRequestedDataPointsNotFoundErrorMsg(
+        ws,
+        message.path,
+        message.requestId,
+      );
+      return;
+    }
+
+    await this.newSession.unsubscribeDataPoints(
+      message,
+      ws,
+      dataPointsToUnsub,
+      this.subscriptionSimulator.unsubscribe.bind(this.subscriptionSimulator),
+    );
   }
 
   private extractNodesFromMetadata(

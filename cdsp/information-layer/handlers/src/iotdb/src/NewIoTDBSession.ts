@@ -7,6 +7,11 @@ import {
   replaceDotsWithUnderscore,
   replaceUnderscoresWithDots,
 } from "../../../utils/transformations";
+import {
+  SubscribeMessageType,
+  UnsubscribeMessageType,
+} from "../../../../router/utils/NewMessage";
+import { WebSocketWithId } from "../../../../utils/database-params";
 
 const METADATA_SUFFIX_DISPLAY = ".Metadata";
 
@@ -313,5 +318,49 @@ export class NewIoTDBSession {
       LogMessageType.WARNING,
     );
     return 11;
+  }
+
+  //** SUBSCRIBE / UNSUBSCRIBE DATA POINTS */
+
+  /**
+   * Bridge method for new-path subscription flow.
+   * For now, it delegates to the provided subscription function (simulator-backed),
+   * while keeping the handler decoupled from execution details.
+   *
+   * This establishes the NewIoTDBSession API boundary so native subscription
+   * logic can be moved here later without changing handler routing code.
+   */
+  public async subscribeDataPoints(
+    message: SubscribeMessageType,
+    ws: WebSocketWithId,
+    dataPoints: string[],
+    subscribeFn: (
+      message: SubscribeMessageType,
+      ws: WebSocketWithId,
+      dataPoints: string[],
+    ) => Promise<void>,
+  ): Promise<void> {
+    await subscribeFn(message, ws, dataPoints);
+  }
+
+  /**
+   * Bridge method for new-path unsubscription flow.
+   * For now, it delegates to the provided unsubscription function (simulator-backed),
+   * while preserving the same contract and cleanup semantics.
+   *
+   * This keeps unsubscribe lifecycle behavior behind the NewIoTDBSession boundary
+   * and prepares migration to native unsubscribe handling later.
+   */
+  public async unsubscribeDataPoints(
+    message: UnsubscribeMessageType,
+    ws: WebSocketWithId,
+    dataPoints: string[],
+    unsubscribeFn: (
+      message: UnsubscribeMessageType,
+      ws: WebSocketWithId,
+      dataPoints: string[],
+    ) => void,
+  ): Promise<void> {
+    unsubscribeFn(message, ws, dataPoints);
   }
 }

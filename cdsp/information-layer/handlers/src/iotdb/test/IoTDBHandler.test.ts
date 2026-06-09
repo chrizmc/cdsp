@@ -7,13 +7,21 @@ import {
   SetMessageType,
   STATUS_SUCCESS,
   GetMessageType,
+  SubscribeMessageType,
+  UnsubscribeMessageType,
+  STATUS_ERRORS,
 } from "../../../../router/utils/NewMessage";
 import { SupportedMessageDataTypes } from "../utils/iotdb-constants";
 import * as configModule from "../../../config/config";
-import { STATUS_ERRORS } from "../../../../router/utils/NewMessage";
 
 jest.mock("../src/Session");
-jest.mock("../src/SubscriptionSimulator");
+jest.mock("../src/SubscriptionSimulator", () => ({
+  getSubscriptionSimulator: jest.fn(() => ({
+    subscribe: jest.fn().mockResolvedValue(undefined),
+    unsubscribe: jest.fn(),
+    unsubscribeClient: jest.fn(),
+  })),
+}));
 jest.mock("../src/NewIoTDBSession");
 jest.mock("../utils/database-helper", () => ({
   transformSessionDataSet: jest.fn(() => [
@@ -58,6 +66,32 @@ describe("IoTDBHandler", () => {
       format: "flat",
     }) as GetMessageType;
 
+  const buildSetMessage = (): SetMessageType =>
+    ({
+      type: NewMessageType.Set,
+      instance: "TEST_VIN",
+      path: "Vehicle",
+      requestId: "req-set-id",
+      data: { Speed: 60 },
+      metadata: { Speed: { unit: "km/h" } },
+    }) as unknown as SetMessageType;
+
+  const buildSubscribeMessage = (): SubscribeMessageType =>
+    ({
+      type: NewMessageType.Subscribe,
+      instance: "TEST_VIN",
+      path: "Vehicle",
+      requestId: "req-sub-1",
+    }) as unknown as SubscribeMessageType;
+
+  const buildUnsubscribeMessage = (): UnsubscribeMessageType =>
+    ({
+      type: NewMessageType.Unsubscribe,
+      instance: "TEST_VIN",
+      path: "Vehicle",
+      requestId: "req-unsub-1",
+    }) as unknown as UnsubscribeMessageType;
+
   beforeEach(() => {
     jest.clearAllMocks();
 
@@ -65,6 +99,7 @@ describe("IoTDBHandler", () => {
     mockSession.authenticateAndConnect = jest.fn();
     mockSession.executeQueryStatement = jest.fn();
     mockSession.getSessionId = jest.fn().mockReturnValue("mockSessionId");
+    mockSession.closeSession = jest.fn().mockResolvedValue(undefined);
 
     mockSendMessage = jest.fn();
     handler = new IoTDBHandler(mockSendMessage);
@@ -80,6 +115,28 @@ describe("IoTDBHandler", () => {
 
       // Assert
       expect(mockSession.authenticateAndConnect).toHaveBeenCalled();
+    });
+
+    test("unsubscribe_client should cleanup simulator and close both sessions", async () => {
+      // Arrange
+      const unsubscribeClientSpy = jest.spyOn(
+        (handler as any).subscriptionSimulator,
+        "unsubscribeClient",
+      );
+      const closeLegacySpy = jest
+        .spyOn((handler as any).session, "closeSession")
+        .mockResolvedValue(undefined);
+      const closeNewSpy = jest
+        .spyOn((handler as any).newSession, "close")
+        .mockResolvedValue(undefined);
+
+      // Act
+      await (handler as any).unsubscribe_client(mockWebSocket);
+
+      // Assert
+      expect(unsubscribeClientSpy).toHaveBeenCalledWith(mockWebSocket);
+      expect(closeLegacySpy).toHaveBeenCalledTimes(1);
+      expect(closeNewSpy).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -275,17 +332,8 @@ describe("IoTDBHandler", () => {
         .spyOn(handler as any, "setNewClient")
         .mockResolvedValue(undefined);
 
-      const msg: SetMessageType = {
-        type: NewMessageType.Set,
-        instance: "TEST_VIN",
-        path: "Vehicle",
-        requestId: "req-set-route-new",
-        data: { Speed: 50 },
-        metadata: {},
-      };
-
       // Act
-      await (handler as any).set(msg, mockWebSocket);
+      await (handler as any).set(buildSetMessage(), mockWebSocket);
 
       // Assert
       expect(setNewSpy).toHaveBeenCalledTimes(1);
@@ -293,15 +341,6 @@ describe("IoTDBHandler", () => {
 
     test("setNewClient should send STATUS_SUCCESS.OK on successful write", async () => {
       // Arrange
-      const msg: SetMessageType = {
-        type: NewMessageType.Set,
-        instance: "TEST_VIN",
-        path: "Vehicle",
-        requestId: "req-set-success",
-        data: { Speed: 60 },
-        metadata: { Speed: { unit: "km/h" } },
-      };
-
       jest.spyOn(handler as any, "areNodesValid").mockReturnValue(true);
 
       jest
@@ -337,7 +376,7 @@ describe("IoTDBHandler", () => {
       };
 
       // Act
-      await (handler as any).setNewClient(msg, mockWebSocket);
+      await (handler as any).setNewClient(buildSetMessage(), mockWebSocket);
 
       // Assert
       expect((handler as any).newSession.setDataPoints).toHaveBeenCalled();
@@ -349,12 +388,9 @@ describe("IoTDBHandler", () => {
 
     test("setNewClient should send SERVICE_UNAVAILABLE on write failure", async () => {
       // Arrange
-      const msg: SetMessageType = {
-        type: NewMessageType.Set,
-        instance: "TEST_VIN",
-        path: "Vehicle",
+      const msg = {
+        ...buildSetMessage(),
         requestId: "req-set-fail",
-        data: { Speed: 60 },
         metadata: {},
       };
 
@@ -398,6 +434,217 @@ describe("IoTDBHandler", () => {
       expect(mockSendMessage).toHaveBeenCalledWith(
         mockWebSocket,
         expect.objectContaining({ code: STATUS_ERRORS.SERVICE_UNAVAILABLE }),
+      );
+    });
+  });
+
+  describe("subscribe/unsubscribe routing", () => {
+    test("should route subscribe to legacy adapter when subscribe path is legacy", async () => {
+      // Arrange
+      jest
+        .spyOn(configModule, "getSubscribeOperationPath")
+        .mockReturnValue("legacy" as any);
+
+      const subscribeLegacySpy = jest
+        .spyOn(handler as any, "subscribeLegacy")
+        .mockImplementation(() => {});
+
+      // Act
+      await (handler as any).subscribe(buildSubscribeMessage(), mockWebSocket);
+
+      // Assert
+      expect(subscribeLegacySpy).toHaveBeenCalledTimes(1);
+    });
+
+    test("should route subscribe to new adapter when subscribe path is new", async () => {
+      // Arrange
+      jest
+        .spyOn(configModule, "getSubscribeOperationPath")
+        .mockReturnValue("new" as any);
+
+      const subscribeNewSpy = jest
+        .spyOn(handler as any, "subscribeNewClient")
+        .mockResolvedValue(undefined);
+
+      // Act
+      await (handler as any).subscribe(buildSubscribeMessage(), mockWebSocket);
+
+      // Assert
+      expect(subscribeNewSpy).toHaveBeenCalledTimes(1);
+    });
+
+    test("should route unsubscribe to legacy adapter when unsubscribe path is legacy", async () => {
+      // Arrange
+      jest
+        .spyOn(configModule, "getUnsubscribeOperationPath")
+        .mockReturnValue("legacy" as any);
+
+      const unsubscribeLegacySpy = jest
+        .spyOn(handler as any, "unsubscribeLegacy")
+        .mockImplementation(() => {});
+
+      // Act
+      await (handler as any).unsubscribe(
+        buildUnsubscribeMessage(),
+        mockWebSocket,
+      );
+
+      // Assert
+      expect(unsubscribeLegacySpy).toHaveBeenCalledTimes(1);
+    });
+
+    test("should route unsubscribe to new adapter when unsubscribe path is new", async () => {
+      // Arrange
+      jest
+        .spyOn(configModule, "getUnsubscribeOperationPath")
+        .mockReturnValue("new" as any);
+
+      const unsubscribeNewSpy = jest
+        .spyOn(handler as any, "unsubscribeNewClient")
+        .mockResolvedValue(undefined);
+
+      // Act
+      await (handler as any).unsubscribe(
+        buildUnsubscribeMessage(),
+        mockWebSocket,
+      );
+
+      // Assert
+      expect(unsubscribeNewSpy).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("subscribe/unsubscribe new client behavior", () => {
+    test("subscribeNewClient should delegate to newSession when datapoints are known", async () => {
+      // Arrange
+      const msg = buildSubscribeMessage();
+      const knownDatapoints = ["Vehicle_Speed"];
+
+      jest
+        .spyOn(handler as any, "getKnownDatapointsByPrefix")
+        .mockReturnValue(knownDatapoints);
+
+      const subscribeSpy = jest
+        .spyOn((handler as any).newSession, "subscribeDataPoints")
+        .mockResolvedValue(undefined);
+
+      // Act
+      await (handler as any).subscribeNewClient(msg, mockWebSocket);
+
+      // Assert
+      expect(subscribeSpy).toHaveBeenCalledWith(
+        msg,
+        mockWebSocket,
+        knownDatapoints,
+        expect.any(Function),
+      );
+    });
+
+    test("subscribeNewClient should send datapoints-not-found when no datapoints are known", async () => {
+      // Arrange
+      const msg = buildSubscribeMessage();
+
+      jest
+        .spyOn(handler as any, "getKnownDatapointsByPrefix")
+        .mockReturnValue([]);
+
+      const notFoundSpy = jest.spyOn(
+        handler as any,
+        "sendRequestedDataPointsNotFoundErrorMsg",
+      );
+
+      // Act
+      await (handler as any).subscribeNewClient(msg, mockWebSocket);
+
+      // Assert
+      expect(notFoundSpy).toHaveBeenCalledWith(
+        mockWebSocket,
+        msg.path,
+        msg.requestId,
+      );
+    });
+
+    test("unsubscribeNewClient should delegate to newSession when datapoints are known", async () => {
+      // Arrange
+      const msg = buildUnsubscribeMessage();
+      const knownDatapoints = ["Vehicle_Speed"];
+
+      jest
+        .spyOn(handler as any, "getKnownDatapointsByPrefix")
+        .mockReturnValue(knownDatapoints);
+
+      const unsubscribeSpy = jest
+        .spyOn((handler as any).newSession, "unsubscribeDataPoints")
+        .mockResolvedValue(undefined);
+
+      // Act
+      await (handler as any).unsubscribeNewClient(msg, mockWebSocket);
+
+      // Assert
+      expect(unsubscribeSpy).toHaveBeenCalledWith(
+        msg,
+        mockWebSocket,
+        knownDatapoints,
+        expect.any(Function),
+      );
+    });
+
+    test("unsubscribeNewClient should be idempotent when called repeatedly", async () => {
+      // Arrange
+      const msg = buildUnsubscribeMessage();
+      const knownDatapoints = ["Vehicle_Speed"];
+
+      jest
+        .spyOn(handler as any, "getKnownDatapointsByPrefix")
+        .mockReturnValue(knownDatapoints);
+
+      const unsubscribeSpy = jest
+        .spyOn((handler as any).newSession, "unsubscribeDataPoints")
+        .mockResolvedValue(undefined);
+
+      // Act
+      await (handler as any).unsubscribeNewClient(msg, mockWebSocket);
+      await (handler as any).unsubscribeNewClient(msg, mockWebSocket);
+
+      // Assert
+      expect(unsubscribeSpy).toHaveBeenCalledTimes(2);
+      expect(unsubscribeSpy).toHaveBeenNthCalledWith(
+        1,
+        msg,
+        mockWebSocket,
+        knownDatapoints,
+        expect.any(Function),
+      );
+      expect(unsubscribeSpy).toHaveBeenNthCalledWith(
+        2,
+        msg,
+        mockWebSocket,
+        knownDatapoints,
+        expect.any(Function),
+      );
+    });
+
+    test("unsubscribeNewClient should send datapoints-not-found when no datapoints are known", async () => {
+      // Arrange
+      const msg = buildUnsubscribeMessage();
+
+      jest
+        .spyOn(handler as any, "getKnownDatapointsByPrefix")
+        .mockReturnValue([]);
+
+      const notFoundSpy = jest.spyOn(
+        handler as any,
+        "sendRequestedDataPointsNotFoundErrorMsg",
+      );
+
+      // Act
+      await (handler as any).unsubscribeNewClient(msg, mockWebSocket);
+
+      // Assert
+      expect(notFoundSpy).toHaveBeenCalledWith(
+        mockWebSocket,
+        msg.path,
+        msg.requestId,
       );
     });
   });
