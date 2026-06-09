@@ -17,28 +17,24 @@ export class NewIoTDBAdapter implements IoTDBOperationAdapter {
     return this.handler.getNewClient(message, ws);
   }
 
-  async set(_message: SetMessageType, _ws: WebSocketWithId): Promise<void> {
+  async set(message: SetMessageType, ws: WebSocketWithId): Promise<void> {
     logMessage("path=new, op=set", LogMessageType.DEBUG);
-    return this.handler.setNewClient(_message, _ws);
+    return this.handler.setNewClient(message, ws);
   }
 
   async subscribe(
-    _message: SubscribeMessageType,
-    _ws: WebSocketWithId,
+    message: SubscribeMessageType,
+    ws: WebSocketWithId,
   ): Promise<void> {
-    logMessage(
-      "NewIoTDBAdapter.subscribe() called - not implemented yet",
-      LogMessageType.WARNING,
-    );
+    logMessage("path=new, op=subscribe", LogMessageType.DEBUG);
+    return this.handler.subscribeNewClient(message, ws);
   }
 
   async unsubscribe(
-    _message: UnsubscribeMessageType,
-    _ws: WebSocketWithId,
+    message: UnsubscribeMessageType,
+    ws: WebSocketWithId,
   ): Promise<void> {
-    logMessage(
-      "NewIoTDBAdapter.unsubscribe() called - not implemented yet",
-      LogMessageType.WARNING,
-    );
+    logMessage("path=new, op=unsubscribe", LogMessageType.DEBUG);
+    return this.handler.unsubscribeNewClient(message, ws);
   }
 }
