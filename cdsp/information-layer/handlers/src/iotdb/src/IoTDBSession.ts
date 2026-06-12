@@ -58,17 +58,28 @@ function buildReceivedTimestampMetadata(
 }
 
 /**
- * Wraps the @iotdb/client Session for use in the new adapter path.
- * Provides lifecycle management and data-point query execution,
- * returning results in the same QueryResult shape as the legacy path.
+ * IoTDBSession encapsulates all direct interactions with the @iotdb/client library,
+ * providing a clean API for the IoTDBHandler to perform database operations without
+ * needing to manage connection details, query construction, or result parsing.
+ *
+ * It includes methods for opening/closing the session, ensuring database existence,
+ * querying data points (latest and within a time window), writing data points with
+ * metadata, and handling subscriptions. The session manages its own connection state
+ * and applies consistent transformations to maintain compatibility with the handler's
+ * expected data formats and metadata conventions.
+ *
+ * This separation of concerns allows the IoTDBHandler to focus on message handling
+ * and response construction, while the IoTDBSession handles all database-specific
+ * logic and interactions, making future maintenance and potential migration to native
+ * subscription handling easier.
  */
-export class NewIoTDBSession {
+export class IoTDBSession {
   private readonly session: Session;
   private sessionOpen = false;
 
   constructor() {
     if (!databaseConfig) {
-      throw new Error("NewIoTDBSession: databaseConfig is not defined");
+      throw new Error("Invalid database configuration.");
     }
     this.session = new Session({
       host: databaseConfig.iotdbHost,
@@ -78,21 +89,65 @@ export class NewIoTDBSession {
     });
   }
 
-  async open(): Promise<void> {
+  public async open(): Promise<void> {
     await this.session.open();
+    try {
+      await this.session.executeNonQueryStatement("SET SQL_DIALECT=TREE");
+      logMessage("IoTDB Session: SQL dialect set to TREE", LogMessageType.INFO);
+    } catch (error: unknown) {
+      // Non-blocking: dialect defaults to TREE on server side anyway.
+      logMessage(
+        "IoTDB Session: could not set SQL dialect explicitly; using server default" +
+          (error instanceof Error ? `: ${error.message}` : ""),
+        LogMessageType.WARNING,
+      );
+    }
     this.sessionOpen = true;
-    logMessage("NewIoTDBSession: session opened", LogMessageType.DEBUG);
+    logMessage("IoTDB Session: session opened", LogMessageType.INFO);
   }
 
-  async close(): Promise<void> {
+  public async close(): Promise<void> {
     if (this.sessionOpen) {
       await this.session.close();
       this.sessionOpen = false;
     }
   }
 
-  isOpen(): boolean {
+  public isOpen(): boolean {
     return this.sessionOpen;
+  }
+
+  public async createDatabaseIfNeeded(databaseName: string): Promise<void> {
+    if (!this.sessionOpen) {
+      await this.open();
+    }
+
+    const sql = `CREATE DATABASE ${databaseName};`;
+    try {
+      await this.session.executeNonQueryStatement(sql);
+      logMessage(
+        `IoTDB Session: ensured database exists (${databaseName})`,
+        LogMessageType.INFO,
+      );
+    } catch (error: unknown) {
+      const errMsg = error instanceof Error ? error.message : String(error);
+
+      const alreadyExists =
+        /already exists/i.test(errMsg) ||
+        /database.*exist/i.test(errMsg) ||
+        /root\..*already/i.test(errMsg);
+
+      if (alreadyExists) {
+        logMessage(
+          `IoTDB Session: database already exists (${databaseName})`,
+          LogMessageType.INFO,
+        );
+        return;
+      }
+
+      // Keep previous tolerant behavior: log but do not throw hard here
+      logError("IoTDB Session: createDatabaseIfNeeded failed", error);
+    }
   }
 
   //** GET DATA POINTS */
@@ -104,7 +159,10 @@ export class NewIoTDBSession {
    * Applies the same column-name normalisation and received-timestamp injection as
    * the legacy path so downstream response building remains identical.
    */
-  async getDataPoints(dataPoints: string[], vin: string): Promise<QueryResult> {
+  public async getDataPoints(
+    dataPoints: string[],
+    vin: string,
+  ): Promise<QueryResult> {
     const { databaseName, dataPointId } = databaseParams["VSS"];
     const latestDataPoints: Record<string, unknown> = {};
     const latestMetadata: Record<string, unknown> = {};
@@ -143,7 +201,68 @@ export class NewIoTDBSession {
         })),
       };
     } catch (error: unknown) {
-      logError("NewIoTDBSession.getDataPoints failed", error);
+      logError("IoTDB Session: getDataPoints failed", error);
+      const errMsg =
+        error instanceof Error ? error.message : "Unknown database error";
+      return { success: false, error: errMsg };
+    }
+  }
+
+  /**
+   * Queries all values for each given data point within the specified time window,
+   * along with any stored metadata, using the new @iotdb/client. Returns results
+   * in the canonical QueryResult shape, applying the same normalisation and
+   * timestamp injection as the legacy path.
+   */
+  public async getDataPointsInWindow(
+    dataPoints: string[],
+    vin: string,
+    lowerExclusive: number,
+    upperInclusive: number,
+  ): Promise<QueryResult> {
+    const { databaseName, dataPointId } = databaseParams["VSS"];
+    const latestDataPoints: Record<string, unknown> = {};
+    const latestMetadata: Record<string, unknown> = {};
+    const safeVin = vin.replace(/'/g, "''");
+
+    try {
+      if (!this.sessionOpen) {
+        await this.open();
+      }
+
+      for (const dataPoint of dataPoints) {
+        const metadataPoint = `${dataPoint}${METADATA_SUFFIX}`;
+        const sql =
+          `SELECT ${dataPoint},${metadataPoint}` +
+          ` FROM ${databaseName}` +
+          ` WHERE ${dataPointId} = '${safeVin}'` +
+          `   AND Time > ${lowerExclusive}` +
+          `   AND Time <= ${upperInclusive}` +
+          ` ORDER BY Time ASC`;
+
+        const dataSet = await this.session.executeQueryStatement(sql);
+        await this.drainDataSet(
+          dataSet,
+          databaseName,
+          latestDataPoints,
+          latestMetadata,
+        );
+        await dataSet.close();
+      }
+
+      return {
+        success: true,
+        dataPoints: Object.entries(latestDataPoints).map(([name, value]) => ({
+          name,
+          value,
+        })),
+        metadata: Object.entries(latestMetadata).map(([name, value]) => ({
+          name,
+          value,
+        })),
+      };
+    } catch (error: unknown) {
+      logError("IoTDB Session: Get DataPointsInWindow failed", error);
       const errMsg =
         error instanceof Error ? error.message : "Unknown database error";
       return { success: false, error: errMsg };
@@ -230,7 +349,7 @@ export class NewIoTDBSession {
    *
    * Returns success/failure and lets caller handle response building.
    */
-  async setDataPoints(
+  public async setDataPoints(
     deviceId: string,
     measurements: string[],
     dataTypes: string[],
@@ -273,14 +392,11 @@ export class NewIoTDBSession {
 
       await this.session.insertTablet(tablet);
 
-      logMessage(
-        "NewIoTDBSession.setDataPoints succeeded",
-        LogMessageType.DEBUG,
-      );
+      logMessage("IoTDB Session: setDataPoints succeeded", LogMessageType.INFO);
 
       return { success: true, status: { code: 200 } };
     } catch (error: unknown) {
-      logError("NewIoTDBSession.setDataPoints failed", error);
+      logError("IoTDB Session: setDataPoints failed", error);
       const errMsg =
         error instanceof Error ? error.message : "Unknown database error";
       return { success: false, error: errMsg };
@@ -327,7 +443,7 @@ export class NewIoTDBSession {
    * For now, it delegates to the provided subscription function (simulator-backed),
    * while keeping the handler decoupled from execution details.
    *
-   * This establishes the NewIoTDBSession API boundary so native subscription
+   * This establishes the IoTDBSession API boundary so native subscription
    * logic can be moved here later without changing handler routing code.
    */
   public async subscribeDataPoints(
@@ -348,7 +464,7 @@ export class NewIoTDBSession {
    * For now, it delegates to the provided unsubscription function (simulator-backed),
    * while preserving the same contract and cleanup semantics.
    *
-   * This keeps unsubscribe lifecycle behavior behind the NewIoTDBSession boundary
+   * This keeps unsubscribe lifecycle behavior behind the IoTDBSession boundary
    * and prepares migration to native unsubscribe handling later.
    */
   public async unsubscribeDataPoints(

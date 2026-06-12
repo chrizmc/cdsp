@@ -9,6 +9,7 @@ export enum COLORS {
   YELLOW = "\x1b[33m",
   ORANGE = "\x1b[38;5;208m",
   BOLD = "\x1b[1m",
+  PALE_BLUE = "\x1b[38;5;153m",
 }
 
 // Define the MessageType enum to strictly enforce allowed types
@@ -19,6 +20,7 @@ export enum LogMessageType {
   WARNING = "WARNING",
   DEBUG = "DEBUG",
   OTHER = "OTHER",
+  INFO = "INFO",
 }
 
 // Mapping MessageType to their corresponding colors
@@ -29,6 +31,7 @@ const MessageTypeColors: Record<LogMessageType, COLORS> = {
   [LogMessageType.WARNING]: COLORS.YELLOW,
   [LogMessageType.DEBUG]: COLORS.ORANGE,
   [LogMessageType.OTHER]: COLORS.PALE_WHITE,
+  [LogMessageType.INFO]: COLORS.PALE_BLUE,
 };
 
 /**
@@ -73,6 +76,9 @@ export function logMessage(
       break;
     case LogMessageType.DEBUG:
       labelText = "\u2699 ".concat(label || "Debug");
+      break;
+    case LogMessageType.INFO:
+      labelText = "\u2139 ".concat(label || "Info");
       break;
     case LogMessageType.OTHER:
       labelText = label || "Message";

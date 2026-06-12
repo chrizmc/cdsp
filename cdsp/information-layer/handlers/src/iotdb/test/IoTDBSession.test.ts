@@ -1,4 +1,4 @@
-import { NewIoTDBSession } from "../src/NewIoTDBSession";
+import { IoTDBSession } from "../src/IoTDBSession";
 import { Session } from "@iotdb/client";
 
 jest.mock("@iotdb/client", () => {
@@ -81,8 +81,8 @@ const createMockDataSet = (rows: MockRow[], columns: string[]): MockDataSet => {
   };
 };
 
-describe("NewIoTDBSession", () => {
-  let newSession: NewIoTDBSession;
+describe("IoTDBSession", () => {
+  let session: IoTDBSession;
   let mockSession: {
     open: jest.Mock;
     close: jest.Mock;
@@ -92,22 +92,106 @@ describe("NewIoTDBSession", () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    newSession = new NewIoTDBSession();
-    mockSession = (Session as unknown as jest.Mock).mock.results[0].value;
+
+    session = new IoTDBSession();
+
+    const sessionMock = Session as unknown as jest.Mock;
+    const lastResult =
+      sessionMock.mock.results[sessionMock.mock.results.length - 1];
+
+    mockSession = lastResult.value;
     mockSession.insertTablet = jest.fn();
   });
 
   describe("lifecycle", () => {
     test("open/close session manage state", async () => {
-      expect(newSession.isOpen()).toBe(false);
+      expect(session.isOpen()).toBe(false);
 
-      await newSession.open();
+      await session.open();
       expect(mockSession.open).toHaveBeenCalled();
-      expect(newSession.isOpen()).toBe(true);
+      expect(session.isOpen()).toBe(true);
 
-      await newSession.close();
+      await session.close();
       expect(mockSession.close).toHaveBeenCalled();
-      expect(newSession.isOpen()).toBe(false);
+      expect(session.isOpen()).toBe(false);
+    });
+  });
+
+  describe("createDatabaseIfNeeded", () => {
+    test("logs INFO and does not fail when database already exists", async () => {
+      // Arrange
+      const openSpy = jest
+        .spyOn(session as any, "open")
+        .mockResolvedValue(undefined);
+      (session as any).sessionOpen = true;
+
+      const executeNonQueryStatementMock = jest
+        .fn()
+        .mockRejectedValue(new Error("Database root.Vehicle already exists"));
+
+      (session as any).session = {
+        executeNonQueryStatement: executeNonQueryStatementMock,
+      };
+
+      const logger = await import("../../../../utils/logger");
+      const logMessageSpy = jest
+        .spyOn(logger, "logMessage")
+        .mockImplementation(() => {});
+      const logErrorSpy = jest
+        .spyOn(logger, "logError")
+        .mockImplementation(() => {});
+
+      // Act
+      await session.createDatabaseIfNeeded("root.Vehicle");
+
+      // Assert
+      expect(openSpy).not.toHaveBeenCalled();
+      expect(executeNonQueryStatementMock).toHaveBeenCalledWith(
+        "CREATE DATABASE root.Vehicle;",
+      );
+      expect(logMessageSpy).toHaveBeenCalledWith(
+        expect.stringContaining("database already exists (root.Vehicle)"),
+        expect.anything(),
+      );
+      expect(logErrorSpy).not.toHaveBeenCalled();
+    });
+
+    test("logs error on unknown create database failure", async () => {
+      // Arrange
+      const openSpy = jest
+        .spyOn(session as any, "open")
+        .mockResolvedValue(undefined);
+      (session as any).sessionOpen = true;
+
+      const executeNonQueryStatementMock = jest
+        .fn()
+        .mockRejectedValue(new Error("permission denied"));
+
+      (session as any).session = {
+        executeNonQueryStatement: executeNonQueryStatementMock,
+      };
+
+      const logger = await import("../../../../utils/logger");
+      const logMessageSpy = jest
+        .spyOn(logger, "logMessage")
+        .mockImplementation(() => {});
+      const logErrorSpy = jest
+        .spyOn(logger, "logError")
+        .mockImplementation(() => {});
+
+      // Act
+      await session.createDatabaseIfNeeded("root.Vehicle");
+
+      // Assert
+      expect(openSpy).not.toHaveBeenCalled();
+      expect(executeNonQueryStatementMock).toHaveBeenCalledWith(
+        "CREATE DATABASE root.Vehicle;",
+      );
+      expect(logErrorSpy).toHaveBeenCalled();
+      expect(logMessageSpy).not.toHaveBeenCalledWith(
+        expect.stringContaining("database already exists"),
+        expect.anything(),
+      );
     });
   });
 
@@ -127,10 +211,7 @@ describe("NewIoTDBSession", () => {
 
       mockSession.executeQueryStatement.mockResolvedValue(dataSet);
 
-      const result = await newSession.getDataPoints(
-        ["Vehicle_Speed"],
-        "VIN123",
-      );
+      const result = await session.getDataPoints(["Vehicle_Speed"], "VIN123");
 
       if (!result.success) {
         throw new Error(`Expected success, got error: ${result.error}`);
@@ -166,10 +247,7 @@ describe("NewIoTDBSession", () => {
 
       mockSession.executeQueryStatement.mockResolvedValue(dataSet);
 
-      const result = await newSession.getDataPoints(
-        ["Vehicle_Speed"],
-        "VIN123",
-      );
+      const result = await session.getDataPoints(["Vehicle_Speed"], "VIN123");
 
       if (!result.success) {
         throw new Error(`Expected success, got error: ${result.error}`);
@@ -203,10 +281,7 @@ describe("NewIoTDBSession", () => {
 
       mockSession.executeQueryStatement.mockResolvedValue(dataSet);
 
-      const result = await newSession.getDataPoints(
-        ["Vehicle_Speed"],
-        "VIN123",
-      );
+      const result = await session.getDataPoints(["Vehicle_Speed"], "VIN123");
 
       if (!result.success) {
         throw new Error(`Expected success, got error: ${result.error}`);
@@ -231,10 +306,7 @@ describe("NewIoTDBSession", () => {
 
       mockSession.executeQueryStatement.mockResolvedValue(dataSet);
 
-      const result = await newSession.getDataPoints(
-        ["Vehicle_Speed"],
-        "VIN123",
-      );
+      const result = await session.getDataPoints(["Vehicle_Speed"], "VIN123");
 
       if (!result.success) {
         throw new Error(`Expected success, got error: ${result.error}`);
@@ -258,10 +330,7 @@ describe("NewIoTDBSession", () => {
         new Error("query failed"),
       );
 
-      const result = await newSession.getDataPoints(
-        ["Vehicle_Speed"],
-        "VIN123",
-      );
+      const result = await session.getDataPoints(["Vehicle_Speed"], "VIN123");
 
       if (result.success) {
         throw new Error(`Expected failure, got success`);
@@ -272,16 +341,35 @@ describe("NewIoTDBSession", () => {
     });
   });
 
+  describe("getDataPointsInWindow", () => {
+    test("opens session lazily when closed", async () => {
+      const openSpy = jest.spyOn(session, "open");
+      const dataSet = createMockDataSet([], []);
+      mockSession.executeQueryStatement.mockResolvedValue(dataSet);
+
+      const result = await session.getDataPointsInWindow(
+        ["Vehicle_Speed"],
+        "VIN123",
+        1000,
+        2000,
+      );
+
+      expect(openSpy).toHaveBeenCalledTimes(1);
+      expect(mockSession.executeQueryStatement).toHaveBeenCalledTimes(1);
+      expect(result.success).toBe(true);
+    });
+  });
+
   describe("setDataPoints", () => {
     test("success and insertTablet called on valid payload", async () => {
       // Arrange
-      await newSession.open();
+      await session.open();
 
       const insertTabletMock = jest.fn().mockResolvedValue(undefined);
       mockSession.insertTablet = insertTabletMock;
 
       // Act
-      const result = await newSession.setDataPoints(
+      const result = await session.setDataPoints(
         "root.vehicle",
         ["Vehicle.Speed", "Vehicle_VehicleIdentification_VIN"],
         ["int16", "string"],
@@ -295,13 +383,13 @@ describe("NewIoTDBSession", () => {
 
     test("fails on mismatched measurements/dataTypes/values lengths", async () => {
       // Arrange
-      await newSession.open();
+      await session.open();
 
       const insertTabletMock = jest.fn().mockResolvedValue(undefined);
       mockSession.insertTablet = insertTabletMock;
 
       // Act
-      const result = await newSession.setDataPoints(
+      const result = await session.setDataPoints(
         "root.vehicle",
         ["Vehicle.Speed", "Vehicle_VehicleIdentification_VIN"], // 2
         ["int16"], // 1
@@ -316,12 +404,12 @@ describe("NewIoTDBSession", () => {
 
     test("opens session lazily when closed", async () => {
       // Arrange (session starts closed by default)
-      const openSpy = jest.spyOn(newSession, "open");
+      const openSpy = jest.spyOn(session, "open");
       const insertTabletMock = jest.fn().mockResolvedValue(undefined);
       mockSession.insertTablet = insertTabletMock;
 
       // Act
-      const result = await newSession.setDataPoints(
+      const result = await session.setDataPoints(
         "root.vehicle",
         ["Vehicle.Speed"],
         ["int16"],
@@ -336,7 +424,7 @@ describe("NewIoTDBSession", () => {
 
     test("returns failure when insertTablet throws", async () => {
       // Arrange
-      await newSession.open();
+      await session.open();
 
       const insertTabletMock = jest
         .fn()
@@ -344,7 +432,7 @@ describe("NewIoTDBSession", () => {
       mockSession.insertTablet = insertTabletMock;
 
       // Act
-      const result = await newSession.setDataPoints(
+      const result = await session.setDataPoints(
         "root.vehicle",
         ["Vehicle.Speed"],
         ["int16"],
@@ -359,13 +447,13 @@ describe("NewIoTDBSession", () => {
 
     test("falls back to STRING for unsupported data type", async () => {
       // Arrange
-      await newSession.open();
+      await session.open();
 
       const insertTabletMock = jest.fn().mockResolvedValue(undefined);
       mockSession.insertTablet = insertTabletMock;
 
       // Act
-      const result = await newSession.setDataPoints(
+      const result = await session.setDataPoints(
         "root.vehicle",
         ["Vehicle.Speed"],
         ["not_a_real_type"],

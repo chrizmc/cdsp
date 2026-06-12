@@ -1,4 +1,4 @@
-import { getHandlerType, logMigrationPathsSummary } from "../config/config";
+import { getHandlerType } from "../config/config";
 import { HandlerBase } from "./HandlerBase";
 import { IoTDBHandler } from "./iotdb/src/IoTDBHandler";
 import { logWithColor, COLORS } from "../../utils/logger";
@@ -17,9 +17,6 @@ export function createHandler(
 ): HandlerBase {
   const handlerType: string = getHandlerType();
   logWithColor(`\n ** Handler: ${handlerType} ** \n`, COLORS.BOLD);
-
-  // Log the summary of migration paths for all operations
-  logMigrationPathsSummary();
 
   let handler: HandlerBase;
 

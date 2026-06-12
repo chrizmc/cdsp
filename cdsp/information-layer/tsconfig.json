@@ -110,9 +110,6 @@
     // "skipDefaultLibCheck": true,                      /* Skip type checking .d.ts files that are included with TypeScript. */
     // "skipLibCheck": true                              /* Skip type checking all .d.ts files. */
   },
-  "include": [
-    "./**/*.ts",
-    "./handlers/src/iotdb/gen-nodejs/**/*.js" // Ensure JS files in gen-nodejs are included
-  ],
+  "include": ["./**/*.ts"],
   "exclude": ["./dist", "node_modules"]
 }
