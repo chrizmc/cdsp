@@ -1,6 +1,4 @@
 import { IoTDBHandler } from "../src/IoTDBHandler";
-import { Session } from "../src/Session";
-import { SessionDataSet } from "../utils/SessionDataSet";
 import { WebSocketWithId } from "../../../../utils/database-params";
 import {
   NewMessageType,
@@ -12,9 +10,7 @@ import {
   STATUS_ERRORS,
 } from "../../../../router/utils/NewMessage";
 import { SupportedMessageDataTypes } from "../utils/iotdb-constants";
-import * as configModule from "../../../config/config";
 
-jest.mock("../src/Session");
 jest.mock("../src/SubscriptionSimulator", () => ({
   getSubscriptionSimulator: jest.fn(() => ({
     subscribe: jest.fn().mockResolvedValue(undefined),
@@ -22,7 +18,7 @@ jest.mock("../src/SubscriptionSimulator", () => ({
     unsubscribeClient: jest.fn(),
   })),
 }));
-jest.mock("../src/NewIoTDBSession");
+jest.mock("../src/IoTDBSession");
 jest.mock("../utils/database-helper", () => ({
   transformSessionDataSet: jest.fn(() => [
     [{ name: "datapoint", value: 1 }],
@@ -39,20 +35,8 @@ jest.mock("../config/database-params", () => ({
   },
 }));
 
-jest.mock("../../../config/config", () => {
-  const actual = jest.requireActual("../../../config/config");
-  return {
-    ...actual,
-    getGetOperationPath: jest.fn(() => "new"),
-    getSetOperationPath: jest.fn(() => "new"),
-    getSubscribeOperationPath: jest.fn(() => "new"),
-    getUnsubscribeOperationPath: jest.fn(() => "new"),
-  };
-});
-
 describe("IoTDBHandler", () => {
   let handler: IoTDBHandler;
-  let mockSession: jest.Mocked<Session>;
   let mockWebSocket: jest.Mocked<WebSocketWithId>;
   let mockSendMessage: jest.Mock;
 
@@ -95,16 +79,9 @@ describe("IoTDBHandler", () => {
   beforeEach(() => {
     jest.clearAllMocks();
 
-    mockSession = new Session() as jest.Mocked<Session>;
-    mockSession.authenticateAndConnect = jest.fn();
-    mockSession.executeQueryStatement = jest.fn();
-    mockSession.getSessionId = jest.fn().mockReturnValue("mockSessionId");
-    mockSession.closeSession = jest.fn().mockResolvedValue(undefined);
-
     mockSendMessage = jest.fn();
     handler = new IoTDBHandler(mockSendMessage);
 
-    (handler as any).session = mockSession;
     mockWebSocket = { id: "test-socket" } as jest.Mocked<WebSocketWithId>;
   });
 
@@ -114,77 +91,45 @@ describe("IoTDBHandler", () => {
       await handler.authenticateAndConnect();
 
       // Assert
-      expect(mockSession.authenticateAndConnect).toHaveBeenCalled();
+      expect((handler as any).session.open).toHaveBeenCalled();
     });
 
-    test("unsubscribe_client should cleanup simulator and close both sessions", async () => {
+    test("unsubscribeClient should cleanup simulator and close both sessions", async () => {
       // Arrange
       const unsubscribeClientSpy = jest.spyOn(
         (handler as any).subscriptionSimulator,
         "unsubscribeClient",
       );
-      const closeLegacySpy = jest
-        .spyOn((handler as any).session, "closeSession")
-        .mockResolvedValue(undefined);
-      const closeNewSpy = jest
-        .spyOn((handler as any).newSession, "close")
+      const closeSpy = jest
+        .spyOn((handler as any).session, "close")
         .mockResolvedValue(undefined);
 
       // Act
-      await (handler as any).unsubscribe_client(mockWebSocket);
+      await (handler as any).unsubscribeClient(mockWebSocket);
 
       // Assert
       expect(unsubscribeClientSpy).toHaveBeenCalledWith(mockWebSocket);
-      expect(closeLegacySpy).toHaveBeenCalledTimes(1);
-      expect(closeNewSpy).toHaveBeenCalledTimes(1);
+      expect(closeSpy).toHaveBeenCalledTimes(1);
     });
   });
 
   describe("get flow", () => {
-    test("should query data points and metadata from IoTDB", async () => {
-      // Arrange
+    test("should delegate getDataPointsFromDB to session", async () => {
       const mockDataPoints = ["Temperature", "Speed"];
       const vin = "TEST_VIN";
+      const queryResult = { success: true, dataPoints: [], metadata: [] };
 
-      mockSession.executeQueryStatement.mockResolvedValue(
-        new SessionDataSet([], [], {}, 0, {}, 0, {}, {}, false),
-      );
+      const getDataPointsSpy = jest
+        .spyOn((handler as any).session, "getDataPoints")
+        .mockResolvedValue(queryResult);
 
-      // Act
       const result = await handler.getDataPointsFromDB(mockDataPoints, vin);
 
-      // Assert
-      const expectedCalls = [
-        expect.stringContaining("SELECT Temperature,Temperature_Metadata"),
-        expect.stringContaining("SELECT Speed,Speed_Metadata"),
-      ];
-
-      expectedCalls.forEach((expected, index) => {
-        expect(mockSession.executeQueryStatement.mock.calls[index][0]).toEqual(
-          expected,
-        );
-      });
-      expect(result.success).toBe(true);
+      expect(getDataPointsSpy).toHaveBeenCalledWith(mockDataPoints, vin);
+      expect(result).toEqual(queryResult);
     });
 
-    test("should route get to new adapter when get path is new", async () => {
-      // Arrange
-      jest
-        .spyOn(configModule, "getGetOperationPath")
-        .mockReturnValue("new" as any);
-
-      const getNewSpy = jest
-        .spyOn(handler as any, "getNewClient")
-        .mockResolvedValue(undefined);
-
-      // Act
-      await (handler as any).get(buildGetMessage(), mockWebSocket);
-
-      // Assert
-      expect(getNewSpy).toHaveBeenCalledTimes(1);
-    });
-
-    test("getNewClient should send datapoints-not-found when no datapoints are known", async () => {
+    test("getData should send datapoints-not-found when no datapoints are known", async () => {
       // Arrange
       jest
         .spyOn(handler as any, "getKnownDatapointsByPrefix")
@@ -198,7 +143,7 @@ describe("IoTDBHandler", () => {
       const msg = buildGetMessage();
 
       // Act
-      await (handler as any).getNewClient(msg, mockWebSocket);
+      await (handler as any).getData(msg, mockWebSocket);
 
       // Assert
       expect(notFoundSpy).toHaveBeenCalledWith(
@@ -208,7 +153,7 @@ describe("IoTDBHandler", () => {
       );
     });
 
-    test("getNewClient should send failure response when new session open fails", async () => {
+    test("getData should send failure response when new session open fails", async () => {
       // Arrange
       const msg = buildGetMessage();
 
@@ -216,7 +161,7 @@ describe("IoTDBHandler", () => {
         .spyOn(handler as any, "getKnownDatapointsByPrefix")
         .mockReturnValue(["Vehicle.Speed"]);
 
-      (handler as any).newSession = {
+      (handler as any).session = {
         isOpen: jest.fn().mockReturnValue(false),
         open: jest.fn().mockRejectedValue(new Error("open failed")),
         getDataPoints: jest.fn(),
@@ -226,11 +171,11 @@ describe("IoTDBHandler", () => {
       const sendGetSpy = jest.spyOn(handler as any, "sendGetResponseToClient");
 
       // Act
-      await (handler as any).getNewClient(msg, mockWebSocket);
+      await (handler as any).getData(msg, mockWebSocket);
 
       // Assert
       expect(sendGetSpy).toHaveBeenCalledWith(
-        { success: false, error: "New session unavailable" },
+        { success: false, error: "Session unavailable" },
         msg.instance,
         [],
         mockWebSocket,
@@ -241,7 +186,7 @@ describe("IoTDBHandler", () => {
       );
     });
 
-    test("getNewClient should forward successful query result via sendGetResponseToClient", async () => {
+    test("getData should forward successful query result via sendGetResponseToClient", async () => {
       // Arrange
       const msg = buildGetMessage();
       const knownDatapoints = ["Vehicle.Speed"];
@@ -255,7 +200,7 @@ describe("IoTDBHandler", () => {
         .spyOn(handler as any, "getKnownDatapointsByPrefix")
         .mockReturnValue(knownDatapoints);
 
-      (handler as any).newSession = {
+      (handler as any).session = {
         isOpen: jest.fn().mockReturnValue(true),
         open: jest.fn(),
         getDataPoints: jest.fn().mockResolvedValue(queryResult),
@@ -265,10 +210,10 @@ describe("IoTDBHandler", () => {
       const sendGetSpy = jest.spyOn(handler as any, "sendGetResponseToClient");
 
       // Act
-      await (handler as any).getNewClient(msg, mockWebSocket);
+      await (handler as any).getData(msg, mockWebSocket);
 
       // Assert
-      expect((handler as any).newSession.getDataPoints).toHaveBeenCalledWith(
+      expect((handler as any).session.getDataPoints).toHaveBeenCalledWith(
         knownDatapoints,
         msg.instance,
       );
@@ -285,7 +230,7 @@ describe("IoTDBHandler", () => {
       );
     });
 
-    test("getNewClient should forward error query result via sendGetResponseToClient", async () => {
+    test("getData should forward error query result via sendGetResponseToClient", async () => {
       // Arrange
       const msg = buildGetMessage();
       const knownDatapoints = ["Vehicle.Speed"];
@@ -295,7 +240,7 @@ describe("IoTDBHandler", () => {
         .spyOn(handler as any, "getKnownDatapointsByPrefix")
         .mockReturnValue(knownDatapoints);
 
-      (handler as any).newSession = {
+      (handler as any).session = {
         isOpen: jest.fn().mockReturnValue(true),
         open: jest.fn(),
         getDataPoints: jest.fn().mockResolvedValue(queryResult),
@@ -305,7 +250,7 @@ describe("IoTDBHandler", () => {
       const sendGetSpy = jest.spyOn(handler as any, "sendGetResponseToClient");
 
       // Act
-      await (handler as any).getNewClient(msg, mockWebSocket);
+      await (handler as any).getData(msg, mockWebSocket);
 
       // Assert
       expect(sendGetSpy).toHaveBeenCalledWith(
@@ -322,24 +267,7 @@ describe("IoTDBHandler", () => {
   });
 
   describe("set flow", () => {
-    test("should route set to new adapter when set path is new", async () => {
-      // Arrange
-      jest
-        .spyOn(configModule, "getSetOperationPath")
-        .mockReturnValue("new" as any);
-
-      const setNewSpy = jest
-        .spyOn(handler as any, "setNewClient")
-        .mockResolvedValue(undefined);
-
-      // Act
-      await (handler as any).set(buildSetMessage(), mockWebSocket);
-
-      // Assert
-      expect(setNewSpy).toHaveBeenCalledTimes(1);
-    });
-
-    test("setNewClient should send STATUS_SUCCESS.OK on successful write", async () => {
+    test("setData should send STATUS_SUCCESS.OK on successful write", async () => {
       // Arrange
       jest.spyOn(handler as any, "areNodesValid").mockReturnValue(true);
 
@@ -366,7 +294,7 @@ describe("IoTDBHandler", () => {
           }
         });
 
-      (handler as any).newSession = {
+      (handler as any).session = {
         isOpen: jest.fn().mockReturnValue(true),
         open: jest.fn(),
         close: jest.fn(),
@@ -376,17 +304,17 @@ describe("IoTDBHandler", () => {
       };
 
       // Act
-      await (handler as any).setNewClient(buildSetMessage(), mockWebSocket);
+      await (handler as any).setData(buildSetMessage(), mockWebSocket);
 
       // Assert
-      expect((handler as any).newSession.setDataPoints).toHaveBeenCalled();
+      expect((handler as any).session.setDataPoints).toHaveBeenCalled();
       expect(mockSendMessage).toHaveBeenCalledWith(
         mockWebSocket,
         expect.objectContaining({ code: STATUS_SUCCESS.OK }),
       );
     });
 
-    test("setNewClient should send SERVICE_UNAVAILABLE on write failure", async () => {
+    test("setData should send SERVICE_UNAVAILABLE on write failure", async () => {
       // Arrange
       const msg = {
         ...buildSetMessage(),
@@ -417,7 +345,7 @@ describe("IoTDBHandler", () => {
           }
         });
 
-      (handler as any).newSession = {
+      (handler as any).session = {
         isOpen: jest.fn().mockReturnValue(true),
         open: jest.fn(),
         close: jest.fn(),
@@ -427,10 +355,10 @@ describe("IoTDBHandler", () => {
       };
 
       // Act
-      await (handler as any).setNewClient(msg, mockWebSocket);
+      await (handler as any).setData(msg, mockWebSocket);
 
       // Assert
-      expect((handler as any).newSession.setDataPoints).toHaveBeenCalled();
+      expect((handler as any).session.setDataPoints).toHaveBeenCalled();
       expect(mockSendMessage).toHaveBeenCalledWith(
         mockWebSocket,
         expect.objectContaining({ code: STATUS_ERRORS.SERVICE_UNAVAILABLE }),
@@ -438,84 +366,8 @@ describe("IoTDBHandler", () => {
     });
   });
 
-  describe("subscribe/unsubscribe routing", () => {
-    test("should route subscribe to legacy adapter when subscribe path is legacy", async () => {
-      // Arrange
-      jest
-        .spyOn(configModule, "getSubscribeOperationPath")
-        .mockReturnValue("legacy" as any);
-
-      const subscribeLegacySpy = jest
-        .spyOn(handler as any, "subscribeLegacy")
-        .mockImplementation(() => {});
-
-      // Act
-      await (handler as any).subscribe(buildSubscribeMessage(), mockWebSocket);
-
-      // Assert
-      expect(subscribeLegacySpy).toHaveBeenCalledTimes(1);
-    });
-
-    test("should route subscribe to new adapter when subscribe path is new", async () => {
-      // Arrange
-      jest
-        .spyOn(configModule, "getSubscribeOperationPath")
-        .mockReturnValue("new" as any);
-
-      const subscribeNewSpy = jest
-        .spyOn(handler as any, "subscribeNewClient")
-        .mockResolvedValue(undefined);
-
-      // Act
-      await (handler as any).subscribe(buildSubscribeMessage(), mockWebSocket);
-
-      // Assert
-      expect(subscribeNewSpy).toHaveBeenCalledTimes(1);
-    });
-
-    test("should route unsubscribe to legacy adapter when unsubscribe path is legacy", async () => {
-      // Arrange
-      jest
-        .spyOn(configModule, "getUnsubscribeOperationPath")
-        .mockReturnValue("legacy" as any);
-
-      const unsubscribeLegacySpy = jest
-        .spyOn(handler as any, "unsubscribeLegacy")
-        .mockImplementation(() => {});
-
-      // Act
-      await (handler as any).unsubscribe(
-        buildUnsubscribeMessage(),
-        mockWebSocket,
-      );
-
-      // Assert
-      expect(unsubscribeLegacySpy).toHaveBeenCalledTimes(1);
-    });
-
-    test("should route unsubscribe to new adapter when unsubscribe path is new", async () => {
-      // Arrange
-      jest
-        .spyOn(configModule, "getUnsubscribeOperationPath")
-        .mockReturnValue("new" as any);
-
-      const unsubscribeNewSpy = jest
-        .spyOn(handler as any, "unsubscribeNewClient")
-        .mockResolvedValue(undefined);
-
-      // Act
-      await (handler as any).unsubscribe(
-        buildUnsubscribeMessage(),
-        mockWebSocket,
-      );
-
-      // Assert
-      expect(unsubscribeNewSpy).toHaveBeenCalledTimes(1);
-    });
-  });
-
-  describe("subscribe/unsubscribe new client behavior", () => {
-    test("subscribeNewClient should delegate to newSession when datapoints are known", async () => {
+  describe("subscribe/unsubscribe data behavior", () => {
+    test("subscribeData should delegate to session when datapoints are known", async () => {
       // Arrange
       const msg = buildSubscribeMessage();
       const knownDatapoints = ["Vehicle_Speed"];
@@ -525,11 +377,11 @@ describe("IoTDBHandler", () => {
         .mockReturnValue(knownDatapoints);
 
       const subscribeSpy = jest
-        .spyOn((handler as any).newSession, "subscribeDataPoints")
+        .spyOn((handler as any).session, "subscribeDataPoints")
         .mockResolvedValue(undefined);
 
       // Act
-      await (handler as any).subscribeNewClient(msg, mockWebSocket);
+      await (handler as any).subscribeData(msg, mockWebSocket);
 
       // Assert
       expect(subscribeSpy).toHaveBeenCalledWith(
@@ -540,7 +392,7 @@ describe("IoTDBHandler", () => {
       );
     });
 
-    test("subscribeNewClient should send datapoints-not-found when no datapoints are known", async () => {
+    test("subscribeData should send datapoints-not-found when no datapoints are known", async () => {
       // Arrange
       const msg = buildSubscribeMessage();
 
@@ -554,7 +406,7 @@ describe("IoTDBHandler", () => {
       );
 
       // Act
-      await (handler as any).subscribeNewClient(msg, mockWebSocket);
+      await (handler as any).subscribeData(msg, mockWebSocket);
 
       // Assert
       expect(notFoundSpy).toHaveBeenCalledWith(
@@ -564,7 +416,7 @@ describe("IoTDBHandler", () => {
       );
     });
 
-    test("unsubscribeNewClient should delegate to newSession when datapoints are known", async () => {
+    test("unsubscribeData should delegate to session when datapoints are known", async () => {
       // Arrange
       const msg = buildUnsubscribeMessage();
       const knownDatapoints = ["Vehicle_Speed"];
@@ -574,11 +426,11 @@ describe("IoTDBHandler", () => {
         .mockReturnValue(knownDatapoints);
 
       const unsubscribeSpy = jest
-        .spyOn((handler as any).newSession, "unsubscribeDataPoints")
+        .spyOn((handler as any).session, "unsubscribeDataPoints")
         .mockResolvedValue(undefined);
 
       // Act
-      await (handler as any).unsubscribeNewClient(msg, mockWebSocket);
+      await (handler as any).unsubscribeData(msg, mockWebSocket);
 
       // Assert
       expect(unsubscribeSpy).toHaveBeenCalledWith(
@@ -589,7 +441,7 @@ describe("IoTDBHandler", () => {
       );
     });
 
-    test("unsubscribeNewClient should be idempotent when called repeatedly", async () => {
+    test("unsubscribeData should be idempotent when called repeatedly", async () => {
       // Arrange
       const msg = buildUnsubscribeMessage();
       const knownDatapoints = ["Vehicle_Speed"];
@@ -599,12 +451,12 @@ describe("IoTDBHandler", () => {
         .mockReturnValue(knownDatapoints);
 
       const unsubscribeSpy = jest
-        .spyOn((handler as any).newSession, "unsubscribeDataPoints")
+        .spyOn((handler as any).session, "unsubscribeDataPoints")
         .mockResolvedValue(undefined);
 
       // Act
-      await (handler as any).unsubscribeNewClient(msg, mockWebSocket);
-      await (handler as any).unsubscribeNewClient(msg, mockWebSocket);
+      await (handler as any).unsubscribeData(msg, mockWebSocket);
+      await (handler as any).unsubscribeData(msg, mockWebSocket);
 
       // Assert
       expect(unsubscribeSpy).toHaveBeenCalledTimes(2);
@@ -624,7 +476,7 @@ describe("IoTDBHandler", () => {
       );
     });
 
-    test("unsubscribeNewClient should send datapoints-not-found when no datapoints are known", async () => {
+    test("unsubscribeData should send datapoints-not-found when no datapoints are known", async () => {
       // Arrange
       const msg = buildUnsubscribeMessage();
 
@@ -638,7 +490,7 @@ describe("IoTDBHandler", () => {
       );
 
       // Act
-      await (handler as any).unsubscribeNewClient(msg, mockWebSocket);
+      await (handler as any).unsubscribeData(msg, mockWebSocket);
 
       // Assert
       expect(notFoundSpy).toHaveBeenCalledWith(

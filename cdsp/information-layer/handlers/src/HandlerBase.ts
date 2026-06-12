@@ -69,41 +69,14 @@ export abstract class HandlerBase {
     );
   }
 
-  async getLegacy(message: GetMessageType, ws: WebSocketWithId): Promise<void> {
-    const requestedDataPoints = this.getKnownDatapointsByPrefix(message.path);
-
-    if (requestedDataPoints.length === 0) {
-      this.sendRequestedDataPointsNotFoundErrorMsg(
-        ws,
-        message.path,
-        message.requestId,
-      );
-      return;
-    }
-
-    const queryResult = await this.getDataPointsFromDB(
-      requestedDataPoints,
-      message.instance,
-    );
-
-    this.sendGetResponseToClient(
-      queryResult,
-      message.instance,
-      requestedDataPoints,
-      ws,
-      message.requestId,
-      message.path,
-      message.root,
-      message.format,
-    );
-  }
-
+  /* eslint-disable @typescript-eslint/no-unused-vars */
   protected async get(
     _message: GetMessageType,
     _ws: WebSocketWithId,
   ): Promise<void> {
     logMessage("get() is not implemented", LogMessageType.WARNING);
   }
+  /* eslint-enable @typescript-eslint/no-unused-vars */
 
   protected sendRequestedDataPointsNotFoundErrorMsg(
     ws: WebSocketWithId,
@@ -136,12 +109,14 @@ export abstract class HandlerBase {
     );
     this.sendMessageToClient(ws, statusMessage);
   }
-
+  /* eslint-disable @typescript-eslint/no-unused-vars */
   protected set(_message: SetMessageType, _ws: WebSocketWithId): Promise<void> {
     logMessage("set() is not implemented", LogMessageType.WARNING);
     return Promise.resolve();
   }
+  /* eslint-enable @typescript-eslint/no-unused-vars */
 
+  /* eslint-disable @typescript-eslint/no-unused-vars */
   protected subscribe(
     _message: SubscribeMessageType,
     _ws: WebSocketWithId,
@@ -149,7 +124,9 @@ export abstract class HandlerBase {
     logMessage("subscribe() is not implemented", LogMessageType.WARNING);
     return Promise.resolve();
   }
+  /* eslint-enable @typescript-eslint/no-unused-vars */
 
+  /* eslint-disable @typescript-eslint/no-unused-vars */
   protected unsubscribe(
     _message: UnsubscribeMessageType,
     _ws: WebSocketWithId,
@@ -157,13 +134,16 @@ export abstract class HandlerBase {
     logMessage("unsubscribe() is not implemented", LogMessageType.WARNING);
     return Promise.resolve();
   }
+  /* eslint-enable @typescript-eslint/no-unused-vars */
 
-  unsubscribe_client(_ws: WebSocketWithId): void {
+  /* eslint-disable @typescript-eslint/no-unused-vars */
+  unsubscribeClient(_ws: WebSocketWithId): void {
     logMessage(
-      "unsubscribe_client() is not implemented",
+      "unsubscribeClient() is not implemented",
       LogMessageType.WARNING,
     );
   }
+  /* eslint-enable @typescript-eslint/no-unused-vars */
 
   handleMessage(message: NewMessage, ws: WebSocketWithId): void {
     try {
@@ -297,11 +277,11 @@ export abstract class HandlerBase {
 
   protected createDataContentMessage(
     instance: string,
-    dataPoints: Array<{ name: string; value: any }>,
+    dataPoints: Array<{ name: string; value: unknown }>,
     root: "absolute" | "relative",
     format: "nested" | "flat",
     path: string,
-    metadata?: Array<{ name: string; value: any }>,
+    metadata?: Array<{ name: string; value: unknown }>,
     requestId?: string,
   ): DataContentMessage {
     return createDataContentMessage(
@@ -317,18 +297,18 @@ export abstract class HandlerBase {
 
   protected extractNodesFromData(
     path: string,
-    data: Record<string, any>,
-  ): Record<string, any> {
-    const result: Record<string, any> = {};
+    data: Record<string, unknown>,
+  ): Record<string, unknown> {
+    const result: Record<string, unknown> = {};
 
     function traverse(
       currentPath: string,
-      currentData: Record<string, any>,
+      currentData: Record<string, unknown>,
     ): void {
       for (const [key, value] of Object.entries(currentData)) {
         const fullPath = `${currentPath}.${key}`;
         if (typeof value === "object" && value !== null) {
-          traverse(fullPath, value);
+          traverse(fullPath, value as Record<string, unknown>);
         } else {
           result[fullPath] = value;
         }
@@ -362,7 +342,7 @@ export abstract class HandlerBase {
     const requestNodes = extractLeafNodesFromRequest(message.path, data);
 
     const unknownFields = Array.from(requestNodes).filter((node) => {
-      return !dataPointsSchema.hasOwnProperty(node);
+      return !Object.prototype.hasOwnProperty.call(dataPointsSchema, node);
     });
 
     if (unknownFields.length > 0) {
@@ -376,8 +356,8 @@ export abstract class HandlerBase {
 
   protected extractNodesFromMessage(
     message: SetMessageType,
-  ): Record<string, any> {
-    const result: Record<string, any> = {};
+  ): Record<string, unknown> {
+    const result: Record<string, unknown> = {};
 
     if (typeof message.data === "object" && message.data !== null) {
       const nodes = this.extractNodesFromData(message.path, message.data);
