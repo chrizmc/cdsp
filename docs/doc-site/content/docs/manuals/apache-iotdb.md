@@ -16,7 +16,7 @@ Info: The intention is to add more information such as a guide for feeder integr
 
 ## Integrating VSS data into the IoTDB data model
 
-The ["Basic Functions"](https://iotdb.apache.org/UserGuide/latest/Basic-Concept/Operate-Metadata_apache.html) section of the IoTDB documentation introduces the IoTDB data model, data types, encoding and compression.
+The ["Background Knowledge"](https://iotdb.apache.org/UserGuide/latest/Background-knowledge/Data-Model-and-Terminology_apache.html) section of the IoTDB documentation introduces the IoTDB data model, data types, encoding and compression.
 
 In IoTDB terminology _measurement_ is the key in a key/value pair. In VSS terms the leaf node name. The timeseries is the record of the measurement on the time axis. A timeseries is a series of time/value data points.
 
@@ -148,7 +148,7 @@ IoTDB has an extensive collection of built-in data processing functions covering
 - Sampling Functions, such as `M4`.
 - Change Points Function, such as `CHANGE_POINTS`.
 
-A full function list with examples can be found in the upstream [IoTDB Function reference manual](https://iotdb.apache.org/UserGuide/latest/SQL-Manual/Operator-and-Expression.html#_2-1-aggregate-functions).
+A full function list with examples can be found in the upstream [IoTDB Function reference manual](https://iotdb.apache.org/UserGuide/latest/SQL-Manual/Operator-and-Expression.html#_2-built-in-functions).
 
 ### Data Quality Library functions
 

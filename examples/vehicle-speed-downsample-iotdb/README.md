@@ -47,7 +47,7 @@ IoTDB provides import/export tools for its native TsFile file format, SQL and CS
 
 ### Transform
 
-IoTDB has a library of Data Quality functions which includes the function [`Sample`](hhttps://iotdb.apache.org/UserGuide/latest/SQL-Manual/UDF-Libraries_apache.html#_3-16-sample) for sampling. Sample has three sampling methods: `Reservoir`, `Isometric` and `Triangle`.
+IoTDB has a library of Data Quality functions which includes the function [`Sample`](https://iotdb.apache.org/UserGuide/latest/SQL-Manual/UDF-Libraries_apache.html#_3-16-sample) for sampling. Sample has three sampling methods: `Reservoir`, `Isometric` and `Triangle`.
 
 Sample function:
 
