@@ -81,11 +81,8 @@ Derived output data:
    docker compose --profile rdfox up
    ```
 
-   To run the same example with the RDF4J stream reasoner instead, use:
-
-   ```bash
-   docker compose --profile rdf4j up
-   ```
+   > **Note:** The `rdf4j` profile is temporarily unavailable while end-to-end
+   > inference validation is in progress. See `docker-compose.yml` for details.
 
 6. Wait until all containers are created and started.
 7. Continue playing the `Night drive to Luftkastellet` on `Remotive Labs` page. You should see a lot of logs in the terminal indicating that data is flowing.
@@ -93,10 +90,6 @@ Derived output data:
 9. To stop and delete the docker containers you can use
    ```bash
    docker compose --profile rdfox down
-   ```
-   or, if you started the RDF4J variant:
-   ```bash
-   docker compose --profile rdf4j down
    ```
 
 ---

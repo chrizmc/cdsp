@@ -66,13 +66,19 @@ services:
       rdfox-init:
         condition: service_completed_successfully
 
-  # RDF4J Stream Reasoner
-  rdf4j-stream-reasoner-service:
-    profiles: ["rdf4j"]
-    image: rdf4j-stream-reasoner:latest
-    container_name: rdf4j-stream-reasoner-service
-    ports:
-      - "12110:12110"
+  # TODO: RDF4J integration is temporarily disabled — the Java reasoner service
+  # has no implementation yet (docker/rdf4j contains no source code).
+  # Re-enable once the following work is completed and merged:
+  #   - Java RDF4J reasoner service (REST API and rule execution)
+  #   - Upgrade C++ RDF4J adapter
+  # To re-enable: uncomment all blocks marked with [RDF4J] below.
+  #
+  # [RDF4J] rdf4j-stream-reasoner-service:
+  #   profiles: ["rdf4j"]
+  #   image: rdf4j-stream-reasoner:latest
+  #   container_name: rdf4j-stream-reasoner-service
+  #   ports:
+  #     - "12110:12110"
 
 
   # Information Layer Server exposing websocket API
@@ -102,17 +108,16 @@ services:
       iotdb-service:
         condition: service_healthy
 
-  # Remotive Labs Bridge
-  rl-bridge-rdf4j:
-    <<: *rl-bridge-common
-    profiles: ["rdf4j"]
-    depends_on:
-      knowledge-layer-rdf4j:
-        condition: service_started
-      information-layer:
-        condition: service_started
-      iotdb-service:
-        condition: service_healthy
+  # [RDF4J] rl-bridge-rdf4j:
+  #   <<: *rl-bridge-common
+  #   profiles: ["rdf4j"]
+  #   depends_on:
+  #     knowledge-layer-rdf4j:
+  #       condition: service_started
+  #     information-layer:
+  #       condition: service_started
+  #     iotdb-service:
+  #       condition: service_healthy
 
   # Knowledge Layer Server using RDFox
   knowledge-layer-rdfox:
@@ -128,19 +133,18 @@ services:
     environment:
       - HOST_REASONER_SERVER=rdfox-service
 
-  # Knowledge Layer Server using RDF4J
-  knowledge-layer-rdf4j:
-    <<: *knowledge-layer-common
-    profiles: ["rdf4j"]
-    volumes:
-      - ./KL-config/rdf4j_model:/src/symbolic-reasoner/examples/use-case/model
-    depends_on:
-      rdf4j-stream-reasoner-service:
-        condition: service_started
-      information-layer:
-        condition: service_started
-    environment:
-      - HOST_REASONER_SERVER=rdf4j-stream-reasoner-service
+  # [RDF4J] knowledge-layer-rdf4j:
+  #   <<: *knowledge-layer-common
+  #   profiles: ["rdf4j"]
+  #   volumes:
+  #     - ./KL-config/rdf4j_model:/src/symbolic-reasoner/examples/use-case/model
+  #   depends_on:
+  #     rdf4j-stream-reasoner-service:
+  #       condition: service_started
+  #     information-layer:
+  #       condition: service_started
+  #   environment:
+  #     - HOST_REASONER_SERVER=rdf4j-stream-reasoner-service
 
 volumes:
   rdfox-server-directory:
