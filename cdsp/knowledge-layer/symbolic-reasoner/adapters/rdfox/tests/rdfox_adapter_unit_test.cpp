@@ -384,6 +384,32 @@ TEST_F(RDFoxAdapterTest, DeleteCursorSuccess) {
     EXPECT_TRUE(success);
 }
 
+/**
+ * @brief Unit test for RDFoxAdapter to verify that loadRules delegates to loadData.
+ */
+TEST_F(RDFoxAdapterTest, LoadRulesSuccess) {
+    const std::string rules = "[?x a :SomeClass] :- [?x :someProperty :someValue] .";
+    const std::string content_type = "application/x.datalog";
+
+    EXPECT_CALL(*mock_rdfox_adapter_, loadData(rules, content_type))
+        .WillOnce(testing::Return(true));
+
+    EXPECT_TRUE(mock_rdfox_adapter_->RDFoxAdapter::loadRules(rules, content_type));
+}
+
+/**
+ * @brief Unit test for RDFoxAdapter to verify that loadRules propagates loadData failure.
+ */
+TEST_F(RDFoxAdapterTest, LoadRulesFailure) {
+    const std::string rules = "[?x a :SomeClass] :- [?x :someProperty :someValue] .";
+    const std::string content_type = "application/x.datalog";
+
+    EXPECT_CALL(*mock_rdfox_adapter_, loadData(rules, content_type))
+        .WillOnce(testing::Return(false));
+
+    EXPECT_FALSE(mock_rdfox_adapter_->RDFoxAdapter::loadRules(rules, content_type));
+}
+
 // Unit tests for RDFoxAdapter to verify error handling of generic operations
 
 /**

@@ -23,6 +23,7 @@ class RDF4JAdapter : public IReasonerAdapter {
 
     virtual void initialize();
     virtual bool loadData(const std::string& data, const std::string& content_type = "text/turtle");
+    virtual bool loadRules(const std::string& rules, const std::string& content_type);
     virtual std::string queryData(
         const std::string& query,
         const QueryLanguageType& query_language_type = QueryLanguageType::SPARQL,

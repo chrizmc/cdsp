@@ -34,6 +34,7 @@ class DtoToModelConfigIntegrationTest : public ::testing::Test {
     void SetUp() override {
         // ** Initialize Main Services **
         setenv("VEHICLE_OBJECT_ID", VinUtils::getRandomVinString().c_str(), 1);
+        setPathToUseCases("/common-test-resources/common_fixtures/use_case_fixture/model/");
 
         // Initialize the mock file handler
         mock_i_file_handler_ = std::make_shared<MockIFileHandler>();
@@ -251,7 +252,7 @@ TEST_F(DtoToModelConfigIntegrationTest, ConvertModelConfigDtoToBo) {
                                                      random_query_extension.second);
 
         std::string expected_bo_reasoning_output_query =
-            MODEL_CONFIG_PATH + dto_queries.reasoning_output_queries_path + "/" +
+            MODEL_CONFIG_PATH + dto_queries.reasoning_output_queries_path +
             dto_reasoning_output_queries_paths.back();
 
         EXPECT_CALL(*mock_i_file_handler_,

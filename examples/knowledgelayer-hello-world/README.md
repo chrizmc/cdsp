@@ -22,7 +22,7 @@ In this use case, we have implemented an AI-powered solution to detect aggressiv
 
 ## How?
 
-Live VSS data from the current drive made accessible in the [Information Layer Server](../../cdsp/information-layer/README.md) via [Websocket](../../cdsp/information-layer/router/src/websocket-server.ts) are converted by a [JSON-RDF-Convertor](../../cdsp/knowledge-layer/connector/README.md) in real-time into a graph data format ([RDF](https://www.w3.org/RDF/)) and stored within the Knowledge Layer in a [Knowledge Graph](https://en.wikipedia.org/wiki/Knowledge_Graph). At any point, every data point (needed for the use case) in the Information Layer has a graph representation. This data representation allows us to attach a [symbolic reasoner](../../cdsp/knowledge-layer/symbolic-reasoner/README.md) ([RDFox](../../cdsp/knowledge-layer/symbolic-reasoner/rdfox/README.md)) to the Knowledge Graph, which can link, evaluate, and infer new facts based on rules, such as deriving the driving style. As soon as an aggressive driving style is detected, the result is converted back from the graph data format to an Information Layer tree format in real time and, in our case, stored in the appropriate data field in the VSS tree. The information "aggressive driving style" can then be shared with other interested applications for example via a data sync middleware.
+Live VSS data from the current drive made accessible in the [Information Layer Server](../../cdsp/information-layer/README.md) via [Websocket](../../cdsp/information-layer/router/src/websocket-server.ts) are converted by a [JSON-RDF-Convertor](../../cdsp/knowledge-layer/connector/README.md) in real-time into a graph data format ([RDF](https://www.w3.org/RDF/)) and stored within the Knowledge Layer in a [Knowledge Graph](https://en.wikipedia.org/wiki/Knowledge_Graph). At any point, every data point (needed for the use case) in the Information Layer has a graph representation. This data representation allows us to attach a [symbolic reasoner](../../cdsp/knowledge-layer/symbolic-reasoner/README.md) ([RDFox](../../cdsp/knowledge-layer/symbolic-reasoner/rdfox/README.md) or [RDF4J](../../../docker/rdf4j/README.md)) to the Knowledge Graph, which can link, evaluate, and infer new facts based on rules, such as deriving the driving style. As soon as an aggressive driving style is detected, the result is converted back from the graph data format to an Information Layer tree format in real time and, in our case, stored in the appropriate data field in the VSS tree. The information "aggressive driving style" can then be shared with other interested applications for example via a data sync middleware.
 
 ### Implementation Details
 
@@ -35,9 +35,9 @@ Live VSS data from the current drive made accessible in the [Information Layer S
   write and subscribe capabilities to VSS data via a websocket server
 - **Connector:** [Knowledge Layer Connector](../../cdsp/knowledge-layer/connector/README.md) - Connects Knowledge Layer to Information Layer via websocket client and manages data tasks within Knowledge Layer
 - **Convertor:** [JSON-RDF-Converter](../../cdsp/knowledge-layer/connector/json-rdf-convertor/README.md) - Converts tree-like data (json) into graph data (RDF) and vice versa
-- **Reasoner Adapter:** [RDFox Adaptor](../../cdsp/knowledge-layer/symbolic-reasoner/README.md) - Converts tree-like data (json) into graph data (RDF) and vice versa
-- **Rules Language:** [Datalog](https://en.wikipedia.org/wiki/Datalog) - Allows describing IF-ELSE like rules in data-near language
-- **Knowledge Graph and Reasoner:** [RDFox](../../cdsp/knowledge-layer/symbolic-reasoner/rdfox/README.md) - Stores the transformed and newly generated graph data, reasons based on rules and graph data, potentially inferring new graph data
+- **Reasoner Adapter:** [RDFox](../../cdsp/knowledge-layer/symbolic-reasoner/README.md) or [RDF4J](../../../docker/rdf4j/README.md) adapter - Selected via `model_config.json`; both expose the same REST interface to the Knowledge Layer
+- **Rules Language:** [Datalog](https://en.wikipedia.org/wiki/Datalog) (RDFox) or [SHACL](https://www.w3.org/TR/shacl/) `sh:SPARQLRule` (RDF4J) - Allows describing IF-ELSE like rules in a data-near language
+- **Knowledge Graph and Reasoner:** [RDFox](../../cdsp/knowledge-layer/symbolic-reasoner/rdfox/README.md) or [RDF4J](../../../docker/rdf4j/README.md) - Stores the transformed and newly generated graph data, reasons based on rules and graph data, potentially inferring new graph data
 
 ![The Use Case in a DIKW,logical and implementation view](KL-example-readme-graphic.png)
 
@@ -81,8 +81,11 @@ Derived output data:
    docker compose --profile rdfox up
    ```
 
-   > **Note:** The `rdf4j` profile is temporarily unavailable while end-to-end
-   > inference validation is in progress. See `docker-compose.yml` for details.
+   To run the same example with the RDF4J stream reasoner instead, use:
+
+   ```bash
+   docker compose --profile rdf4j up
+   ```
 
 6. Wait until all containers are created and started.
 7. Continue playing the `Night drive to Luftkastellet` on `Remotive Labs` page. You should see a lot of logs in the terminal indicating that data is flowing.
@@ -90,6 +93,10 @@ Derived output data:
 9. To stop and delete the docker containers you can use
    ```bash
    docker compose --profile rdfox down
+   ```
+   or, if you started the RDF4J variant:
+   ```bash
+   docker compose --profile rdf4j down
    ```
 
 ---

@@ -15,6 +15,8 @@ class MockReasonerAdapter : public IReasonerAdapter {
                 (override));
     MOCK_METHOD(bool, loadData, (const std::string& data, const std::string& content_type),
                 (override));
+    MOCK_METHOD(bool, loadRules, (const std::string& rules, const std::string& content_type),
+                (override));
     MOCK_METHOD(bool, deleteDataStore, (), (override));
 };
 #endif  // MOCK_REASONER_ADAPTER_H

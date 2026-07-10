@@ -3,9 +3,9 @@
   xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
 
-<groupId>com.thesis</groupId>
-<artifactId>rdf4j-stream-reasoner</artifactId>
-<version>1.0-SNAPSHOT</version>
+<groupId>org.covesa.cdsp</groupId>
+<artifactId>rdf4j-reasoner</artifactId>
+<version>1.0.0</version>
 
   <parent>
     <groupId>org.springframework.boot</groupId>

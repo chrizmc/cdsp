@@ -17,5 +17,7 @@ class MockRDFoxAdapter : public RDFoxAdapter {
                 (override));
     MOCK_METHOD(bool, loadData, (const std::string& data, const std::string& content_type),
                 (override));
+    MOCK_METHOD(bool, loadRules, (const std::string& rules, const std::string& content_type),
+                (override));
 };
 #endif  // MOCK_RDFOX_ADAPTER_H
