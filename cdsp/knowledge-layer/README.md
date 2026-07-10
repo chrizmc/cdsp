@@ -110,22 +110,22 @@ If the build is successful, the WebSocket client executable will be generated in
 
 The [Reasoner client](./connector/websocket-client/README.md) integrates with both the WebSocket server and the RDFox triple store. The client processes incoming messages and generates RDF triples, which are then stored in RDFox.
 
-### Websocket Server and RDFox Configuration
+### WebSocket Server and Reasoner Configuration
 
-The project requires certain environment variables to work with the WebSocket server and RDFox server. By default, the WebSocket client connects to the Web Socket server located in the [`information-layer`](../information-layer/README.md), and the RDFox server started as a [Docker container](/docker/README.md#rdfox-restful-api).
+The project requires certain environment variables to work with the WebSocket server and the reasoner server. By default, the WebSocket client connects to the WebSocket server located in the [`information-layer`](../information-layer/README.md). Two reasoning engines are supported: **RDFox** and **RDF4J** (see [Choosing a Reasoning Engine](#choosing-a-reasoning-engine)).
 
 - **HOST_WEBSOCKET_SERVER:** Specifies the hostname of the WebSocket server. The default is `127.0.0.1`.
 - **PORT_WEBSOCKET_SERVER:** Specifies the port for connecting to the WebSocket server. The default is `8080`.
 - **TARGET_WEBSOCKET_SERVER:** The target endpoint on the WebSocket server to which the client will connect. The default is empty string.
 - **[SCHEMA]\_OBJECT_ID:** The Object ID environment variable is required to subscribe and retrieve information for a specific object, such as a VIN (Vehicle Identification Number) when working with Vehicle Signal Specification (VSS) data. [SCHEMA] represents the schema type being used, such as VEHICLE. For example, if you are working with Vehicle data under the VSS schema, the environment variable should be set as: `VEHICLE_OBJECT_ID`. Use the Object ID configured in the [`information-layer`](../information-layer/README.md).
-- **HOST_REASONER_SERVER:** Hostname of the RDFox server. The default is `127.0.0.1`.
-- **PORT_REASONER_SERVER:** Port for RDFox server. The default is `12110`.
-- **AUTH_REASONER_SERVER_BASE64:** Base64-encoded credentials for RDFox authentication. The default is `cm9vdDphZG1pbg==` (For `root:admin` encoded in base64).
-- **REASONER_DATASTORE_NAME:** Data store used in RDFox server to store the generated data. The default is `ds-test`.
+- **HOST_REASONER_SERVER:** Hostname of the reasoner server. The default is `127.0.0.1`.
+- **PORT_REASONER_SERVER:** Port for the reasoner server. The default is `12110`.
+- **AUTH_REASONER_SERVER_BASE64:** Base64-encoded credentials for reasoner authentication. The default is `cm9vdDphZG1pbg==` (`root:admin` in base64). Required for RDFox; ignored by RDF4J.
+- **REASONER_DATASTORE_NAME:** Data store used in the reasoner server to store the generated data. The default is `ds-test`.
 - **REASONER_ORIGIN_SYSTEM_NAME:** Origin system name for the reasoner server used to identify the source of the data. The default is `SemanticReasoner`.
 - **MODEL_CONFIGURATION_PATH:** Path to the model configuration file used by the reasoner client. The default is `/symbolic-reasoner/examples/use-case/rdfox_model/`.
 
-You can customize the WebSocket server configuration by adding the following environment variables in the `/docker/.env` file. Below is an example of what the file could look like:
+You can customize the configuration by adding the following environment variables in the `/docker/.env` file. Below is an example of what the file could look like:
 
 ```text
 ##################################
@@ -138,15 +138,29 @@ TARGET_WEBSOCKET_SERVER="your_custom_target_endpoint"
 VEHICLE_OBJECT_ID="vin_to_subscribe"
 
 ##################################
-# RDFox CONFIGURATION            #
+# REASONER CONFIGURATION         #
 ##################################
 
-HOST_REASONER_SERVER="your_custom_rdfox_server_host"
-PORT_REASONER_SERVER="your_custom_rdfox_server_port"
-AUTH_REASONER_SERVER_BASE64="your_custom_rdfox_server_authentication"
-REASONER_DATASTORE_NAME="your_custom_rdfox_server_data_store"
+HOST_REASONER_SERVER="your_reasoner_server_host"
+PORT_REASONER_SERVER="your_reasoner_server_port"
+AUTH_REASONER_SERVER_BASE64="your_reasoner_server_authentication"
+REASONER_DATASTORE_NAME="your_reasoner_server_data_store"
 MODEL_CONFIGURATION_PATH="path_to_your_model_config"
 ```
+
+### Choosing a Reasoning Engine
+
+The reasoning engine is selected via the `inference_engine` field in `model_config.json` inside the model directory pointed to by `MODEL_CONFIGURATION_PATH`. Two engines are supported:
+
+| Engine | `inference_engine` | Docker service | Model path (Hello World example) |
+|--------|-------------------|----------------|----------------------------------|
+| RDFox  | `"RDFox"`  | `rdfox-service` (requires license) | `KL-config/rdfox_model/` |
+| RDF4J  | `"RDF4J"`  | `rdf4j-stream-reasoner-service` | `KL-config/rdf4j_model/` |
+
+To switch engines, set `HOST_REASONER_SERVER` to the target service and point `MODEL_CONFIGURATION_PATH` to the corresponding model directory. No code changes are required.
+
+- RDFox uses Datalog rules (`.dlog`) and requires a license file. See [docker/README.md](/docker/README.md#rdfox-restful-api).
+- RDF4J uses SHACL `sh:SPARQLRule` CONSTRUCT patterns (`.shacl`) and requires no license. See [docker/rdf4j/README.md](/docker/rdf4j/README.md).
 
 ### Start the Reasoner Websocket Client
 
@@ -162,11 +176,11 @@ To display a list of available environment variables and their default values, r
 ./reasoner_client --help
 ```
 
-### Using RDFox API in the Client
+### Using the Reasoner API in the Client
 
-The WebSocket client integrates with the [TripleAssembler](./connector/json-rdf-convertor/rdf-writer/README.md) component, which utilizes the[RDFox API](/docker/README.md#rdfox-restful-api) to process incoming data into RDF triples. The triples are then stored in RDFox for reasoning and querying.
+The WebSocket client integrates with the [TripleAssembler](./connector/json-rdf-convertor/rdf-writer/README.md) component, which converts incoming data into RDF triples and pushes them to the configured reasoner server via its REST API. The reasoner applies inference rules and makes results available for querying.
 
-This integration allows the Reasoner client to interpret data, create RDF triples, and store them in a semantic knowledge graph, enabling rich queries and reasoning capabilities.
+This integration allows the Reasoner client to interpret data, create RDF triples, and store them in a semantic knowledge graph, enabling rich queries and reasoning capabilities regardless of the underlying engine.
 
 # Running Tests in C++
 

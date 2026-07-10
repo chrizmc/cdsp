@@ -28,7 +28,7 @@ class ReasonerService {
 
     virtual bool loadRules(const std::string& rules, const RuleLanguageType& content_type) {
         const std::string content_type_str = ruleLanguageTypeToContentType(content_type);
-        return adapter_->loadData(rules, content_type_str);
+        return adapter_->loadRules(rules, content_type_str);
     }
 
     virtual std::string queryData(

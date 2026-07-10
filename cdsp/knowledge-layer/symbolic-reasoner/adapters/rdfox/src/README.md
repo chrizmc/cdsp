@@ -4,12 +4,10 @@
 
 `RDFoxAdapter` is responsible for communicating with the RDFox server using RESTful APIs. This adapter allows users to perform various operations such as creating connections, loading data, querying data (using [SPARQL](https://www.w3.org/TR/sparql11-query/)), and managing cursors efficiently.
 
-
-> **Note:** When the `RDFoxAdapter` initializes, it creates a datastore called `vehicle_ds` in the RDFox server if it does not exist.
-
+> [!NOTE]
+> When the `RDFoxAdapter` initializes, it creates the datastore (name configured via the `REASONER_DATASTORE` environment variable) in the RDFox server if it does not exist.
 
 ## Features
-
 
 - **Data Store Management**:
   - Initialize and ensure the existence of the datastore.
@@ -69,12 +67,13 @@ std::cout << "Query Result: " << result << std::endl;
 ```
 
 **Managing Cursors**
+
 ```cpp
 std::pair<std::string, std::string> connection = adapter.createConnection();
 std::string cursor_id = adapter.createCursor(connection.first, connection.second, sparql_query);
 
 std::string cursor_result;
-adapter.advanceCursor(connection.first, connection.second, cursor_id, 
+adapter.advanceCursor(connection.first, connection.second, cursor_id,
                       "application/sparql-results+json", "open", 100, &cursor_result);
 
 std::cout << "Cursor Result: " << cursor_result << std::endl;
@@ -84,6 +83,7 @@ adapter.deleteCursor(connection.first, cursor_id);
 
 > [!NOTE] Allowed Operations for Advancing the Cursor
 > The `RDFoxAdapter::advanceCursor` method allows two operations:
+>
 > - **`open`:** Opens the cursor for the first time and retrieves data starting from the beginning.
 > - **`advance`:** Advances the cursor from its current position to the next set of results.
 

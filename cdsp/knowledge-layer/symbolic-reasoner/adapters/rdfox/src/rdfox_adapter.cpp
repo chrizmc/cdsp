@@ -91,6 +91,10 @@ bool RDFoxAdapter::loadData(const std::string& data, const std::string& content_
         .sendRequest();
 };
 
+bool RDFoxAdapter::loadRules(const std::string& rules, const std::string& content_type) {
+    return loadData(rules, content_type);
+}
+
 /**
  * Queries data from the RDFox datastore.
  *

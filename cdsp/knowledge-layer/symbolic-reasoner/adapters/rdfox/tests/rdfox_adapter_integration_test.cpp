@@ -1,6 +1,8 @@
 #include <gtest/gtest.h>
 
+#include <map>
 #include <string>
+#include <utility>
 
 #include "data_types.h"
 #include "random_utils.h"

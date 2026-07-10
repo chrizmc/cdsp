@@ -32,9 +32,11 @@ covesa.cdsp/
 │       │   │
 │       │   └── rdf4j/                      # RDF4J adapter
 │       │       ├── README.md
-│       │       └── src/
-│       │           ├── rdf4j_adapter.h
-│       │           └── rdf4j_adapter.cpp
+│       │       ├── src/
+│       │       │   ├── rdf4j_adapter.h
+│       │       │   └── rdf4j_adapter.cpp
+│       │       │
+│       │       └── tests/                  # Adapter-specific tests
 │       │
 │       ├── interfaces/
 │       │   └── i_reasoner_adapter.h        # Common interface all adapters implement
@@ -56,7 +58,7 @@ covesa.cdsp/
         ├── Dockerfile
         ├── README.md
         ├── pom.xml
-        └── src/main/java/...
+        └── src/main/...
 ```
 
 ## Currently Supported Reasoners
@@ -141,6 +143,7 @@ class MyReasonerAdapter : public IReasonerAdapter {
     void initialize() override;
     bool loadData(const std::string& data,
                   const std::string& content_type = "text/turtle") override;
+    bool loadRules(const std::string& rules, const std::string& content_type) override;
     std::string queryData(
         const std::string& query,
         const QueryLanguageType& query_language_type = QueryLanguageType::SPARQL,
@@ -191,6 +194,12 @@ bool MyReasonerAdapter::checkDataStore() {
 
 bool MyReasonerAdapter::loadData(const std::string& data,
                                   const std::string& content_type) {
+    // Implementation specific to your reasoner
+    return true;
+}
+
+bool MyReasonerAdapter::loadRules(const std::string& rules,
+                                   const std::string& content_type) {
     // Implementation specific to your reasoner
     return true;
 }

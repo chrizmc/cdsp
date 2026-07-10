@@ -18,3 +18,12 @@ ReasonerServerData ServerDataFixture::getValidRDFoxServerData() {
     data.data_store_name = "test_ds";
     return data;
 }
+
+ReasonerServerData ServerDataFixture::getValidRDF4JServerData() {
+    ReasonerServerData data;
+    data.host = "127.0.0.1";
+    data.port = "12110";
+    data.auth_base64 = "";
+    data.data_store_name = "test_ds";
+    return data;
+}

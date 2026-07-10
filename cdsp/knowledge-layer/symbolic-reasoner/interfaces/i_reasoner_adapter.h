@@ -11,6 +11,7 @@ class IReasonerAdapter {
    public:
     virtual void initialize() = 0;
     virtual bool loadData(const std::string& data, const std::string& content_type) = 0;
+    virtual bool loadRules(const std::string& rules, const std::string& content_type) = 0;
     virtual std::string queryData(const std::string& query,
                                   const QueryLanguageType& query_language_type,
                                   const DataQueryAcceptType& accept_type) = 0;

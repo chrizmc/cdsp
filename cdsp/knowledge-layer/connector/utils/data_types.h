@@ -9,10 +9,7 @@
 /**
  * @brief Enum class for the supported inference engine types
  */
-enum class InferenceEngineType {
-    RDFOX,
-    RDF4J
-};
+enum class InferenceEngineType { RDFOX, RDF4J };
 
 /**
  * @brief Enum class for the message types
@@ -61,10 +58,7 @@ enum class QueryLanguageType {
 /**
  * @brief Enum class for the reasoning rule language types
  */
-enum class RuleLanguageType {
-    DATALOG,
-    SHACL
-};
+enum class RuleLanguageType { DATALOG, SHACL };
 
 /**
  * @brief Enum class for the data query accept types
@@ -437,9 +431,9 @@ inline RuleLanguageType fileExtensionToRuleLanguageType(const std::string& exten
     std::string lowerCaseExtension = Helper::toLowerCase(extension);
     if (lowerCaseExtension == ".dlog") {
         return RuleLanguageType::DATALOG;
-    }else if(lowerCaseExtension == ".shacl") {
-         return RuleLanguageType::SHACL;
-    }else {
+    } else if (lowerCaseExtension == ".shacl") {
+        return RuleLanguageType::SHACL;
+    } else {
         throw std::invalid_argument("Unsupported rule file extension: " + extension);
     }
 }
@@ -448,6 +442,8 @@ inline std::string ruleLanguageTypeToContentType(const RuleLanguageType& type) {
     switch (type) {
         case RuleLanguageType::DATALOG:
             return "application/x.datalog";
+        case RuleLanguageType::SHACL:
+            return "text/turtle";
         default:
             throw std::invalid_argument("Unsupported rule language type");
     }

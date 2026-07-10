@@ -1,4 +1,4 @@
-PREFIX car: <http://example.ontology.com/car#> .
+PREFIX car: <http://example.ontology.com/car#>
 PREFIX sosa: <http://www.w3.org/ns/sosa/>
 PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
 

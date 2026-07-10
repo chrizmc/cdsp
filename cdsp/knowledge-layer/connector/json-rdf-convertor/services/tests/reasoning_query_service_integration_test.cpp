@@ -74,7 +74,7 @@ TEST_F(ReasoningQueryServiceTest, ProcessRegularReasoningQuery_Success) {
   )"_json);
 
     const std::string triple_data = R"(
-    PREFIX car: <http://example.ontology.com/car#> .
+    @prefix car: <http://example.ontology.com/car#> .
     @prefix sosa: <http://www.w3.org/ns/sosa/> .
     @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 

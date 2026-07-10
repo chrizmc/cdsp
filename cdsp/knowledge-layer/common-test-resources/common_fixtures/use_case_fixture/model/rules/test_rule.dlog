@@ -1,6 +1,6 @@
-PREFIX car: <http://example.ontology.com/car#> .
-@prefix sosa: <http://www.w3.org/ns/sosa/> .
-@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+PREFIX car: <http://example.ontology.com/car#>
+PREFIX sosa: <http://www.w3.org/ns/sosa/>
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
 
 # --- Detect sharp turns at high speed ---
 # Angle > 45°, Speed > 80 km/h

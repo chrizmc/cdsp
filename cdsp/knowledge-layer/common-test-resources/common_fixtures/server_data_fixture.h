@@ -6,6 +6,7 @@ class ServerDataFixture {
    public:
     static WSServerData getValidWebsocketServerData();
     static ReasonerServerData getValidRDFoxServerData();
+    static ReasonerServerData getValidRDF4JServerData();
 };
 
 #endif  // SERVER_DATA_FIXTURE_H
