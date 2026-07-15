@@ -35,9 +35,9 @@ Live VSS data from the current drive made accessible in the [Information Layer S
   write and subscribe capabilities to VSS data via a websocket server
 - **Connector:** [Knowledge Layer Connector](../../cdsp/knowledge-layer/connector/README.md) - Connects Knowledge Layer to Information Layer via websocket client and manages data tasks within Knowledge Layer
 - **Convertor:** [JSON-RDF-Converter](../../cdsp/knowledge-layer/connector/json-rdf-convertor/README.md) - Converts tree-like data (json) into graph data (RDF) and vice versa
-- **Reasoner Adapter:** [RDFox](../../cdsp/knowledge-layer/symbolic-reasoner/README.md) or [RDF4J](../../../docker/rdf4j/README.md) adapter - Selected via `model_config.json`; both expose the same REST interface to the Knowledge Layer
-- **Rules Language:** [Datalog](https://en.wikipedia.org/wiki/Datalog) (RDFox) or [SHACL](https://www.w3.org/TR/shacl/) `sh:SPARQLRule` (RDF4J) - Allows describing IF-ELSE like rules in a data-near language
-- **Knowledge Graph and Reasoner:** [RDFox](../../cdsp/knowledge-layer/symbolic-reasoner/rdfox/README.md) or [RDF4J](../../../docker/rdf4j/README.md) - Stores the transformed and newly generated graph data, reasons based on rules and graph data, potentially inferring new graph data
+- **Reasoner Adapter:** [RDF4J](../../../docker/rdf4j/README.md) (default, open-source) or [RDFox](../../cdsp/knowledge-layer/symbolic-reasoner/README.md) (requires commercial license) adapter - Selected via `model_config.json`; both expose the same REST interface to the Knowledge Layer
+- **Rules Language:** [SHACL](https://www.w3.org/TR/shacl/) `sh:SPARQLRule` (RDF4J, default) or [Datalog](https://en.wikipedia.org/wiki/Datalog) (RDFox) - Allows describing IF-ELSE like rules in a data-near language
+- **Knowledge Graph and Reasoner:** [RDF4J](../../../docker/rdf4j/README.md) (default) or [RDFox](../../cdsp/knowledge-layer/symbolic-reasoner/rdfox/README.md) (licensed) - Stores the transformed and newly generated graph data, reasons based on rules and graph data, potentially inferring new graph data
 
 ![The Use Case in a DIKW,logical and implementation view](KL-example-readme-graphic.png)
 
@@ -66,8 +66,7 @@ Derived output data:
 2. Navigate to `Recordings`, select `Night drive to Luftkastellet`, and start the recording with the `Play` button. Wait until it starts playing, then stop the recording for now. This creates a broker for you, and we need its credentials next.
 3. Navigate to the `Brokers` section and open `My personal broker`.
 4. Copy the URL and API key to the environment variables in the [.env](.env) file: `REMOTIVE_LABS_BROKER_URL` and `REMOTIVE_LABS_BROKER_API_KEY`.
-5. If you plan to run the `rdfox` profile, acquire the `RDFox.lic` license file from [Oxford Semantic Technologies](https://www.oxfordsemantic.tech/).
-6. If you use `rdfox`, place the license file in the folder [examples/shared-config/rdfox](../shared-config/rdfox).
+5. *(Optional, only for the `rdfox` profile)* Acquire the `RDFox.lic` license file from [Oxford Semantic Technologies](https://www.oxfordsemantic.tech/) and place it in [examples/shared-config/rdfox](../shared-config/rdfox). This step is **not** required for the default RDF4J profile.
 
 ### Run Use Case
 
@@ -78,13 +77,13 @@ Derived output data:
 5. Start all services from the current folder ([knowledgelayer-hello-world]()). Make sure you have installed `Docker` and `Docker Compose`.
 
    ```bash
-   docker compose --profile rdfox up
+   docker compose --profile rdf4j up
    ```
 
-   To run the same example with the RDF4J stream reasoner instead, use:
+   RDF4J is the default reasoner — it is fully open-source and does not require a license. To run with the RDFox reasoner instead (requires a commercial license, see setup step above):
 
    ```bash
-   docker compose --profile rdf4j up
+   docker compose --profile rdfox up
    ```
 
 6. Wait until all containers are created and started.
@@ -92,11 +91,11 @@ Derived output data:
 8. Knowledge Layer will generate triples in `KL-config/<reasoner>/output/triples` folder and the reasoner responses that are send to Information Layer in `KL-config/<reasoner>/output/reasoning_output`
 9. To stop and delete the docker containers you can use
    ```bash
-   docker compose --profile rdfox down
-   ```
-   or, if you started the RDF4J variant:
-   ```bash
    docker compose --profile rdf4j down
+   ```
+   or, if you started the RDFox variant:
+   ```bash
+   docker compose --profile rdfox down
    ```
 
 ---
