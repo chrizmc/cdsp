@@ -10,6 +10,8 @@ The compose file `docker-compose-cdsp.yml` provides a containerized deployment o
 - [VISSR docker image build setup](#vissr-docker-image-build-setup)
 - [Websocket-Server (CDSP - information layer) docker image build setup](#websocket-server-cdsp---information-layer-docker-image-build-setup)
 - [Websocket-Client (CDSP - knowledge layer) docker image build setup](#websocket-client-cdsp---knowledge-layer-docker-image-build-setup)
+  - [RDFox reasoner (`rdfox` profile, licensed)](#rdfox-restful-api)
+  - [RDF4J reasoner (`rdf4j` profile, open-source)](#rdf4j-reasoner)
 - [Deploy with Docker Compose](#deploy-with-docker-compose)
 
 ## Docker installation
@@ -35,6 +37,9 @@ Create it and add a placeholder for the RDFox license file for now, like this:
 ```
 RDFOX_LIC_PATH="."  # set path to RDFox.lic file
 ```
+
+> [!NOTE]
+> The reasoner used by the Knowledge Layer is selected via a Docker Compose [profile](https://docs.docker.com/compose/how-tos/profiles/): `rdfox` (commercial, requires the license above) or `rdf4j` (open-source, no license required). See [Websocket client (CDSP - knowledge layer) docker image build setup](#websocket-client-cdsp---knowledge-layer-docker-image-build-setup). `RDFOX_LIC_PATH` is only needed if you use the `rdfox` profile, but the variable must still exist in `.env` for Docker Compose to parse the file.
 
 ## VISSR docker image build setup
 
@@ -186,9 +191,11 @@ e16c8ed4ed42   cdsp-iotdb-service              "/usr/bin/dumb-init …"   23 min
 
 ## Websocket client (CDSP - knowledge layer) docker image build setup
 
+The Knowledge Layer needs a symbolic reasoner backend. Two are supported, selected via a Docker Compose profile: [`rdfox`](#rdfox-restful-api) (commercial, requires a license) or [`rdf4j`](#rdf4j-reasoner) (open-source, no license required, default choice for a quick start).
+
 ### RDFox RESTful API
 
-In order to get access to `RDFox RESTfull API` it is required to build two Docker images (`rdfox-init` and `rdfox-service`).
+In order to get access to `RDFox RESTfull API` it is required to build two Docker images (`rdfox-init` and `rdfox-service`). These services are only started when the `rdfox` profile is selected, e.g. `docker compose -f docker-compose-cdsp.yml --profile rdfox up -d`.
 
 ### Prerequisites
 
@@ -219,23 +226,34 @@ In order to get access to `RDFox RESTfull API` it is required to build two Docke
 Use the following commands to start both images:
 
 ```shell
-$ sudo docker compose -f docker-compose-cdsp.yml up -d rdfox-init
+$ sudo docker compose -f docker-compose-cdsp.yml --profile rdfox up -d rdfox-init
 # ...
 # [+] Running 2/2
 # ✔ Volume "cdsp_rdfox-server-directory"  created
 # ✔ Container rdfox-init                  Started
 
-$ sudo docker compose -f docker-compose-cdsp.yml up -d rdfox-service
+$ sudo docker compose -f docker-compose-cdsp.yml --profile rdfox up -d rdfox-service
 # ...
 # [+] Running 2/2
 # ✔ Container rdfox-init     Started
 # ✔ Container rdfox-service  Started
 ```
 
+### RDF4J Reasoner
+
+[RDF4J](rdf4j/README.md) is an open-source reasoner and requires no license, making it the simplest way to try out the Knowledge Layer. It runs as a single service, `rdf4j-stream-reasoner-service`, built from [docker/rdf4j](rdf4j), and is only started when the `rdf4j` profile is selected:
+
+```shell
+$ sudo docker compose -f docker-compose-cdsp.yml --profile rdf4j up -d rdf4j-stream-reasoner-service
+# ...
+# [+] Running 1/1
+# ✔ Container rdf4j-stream-reasoner-service   Started
+```
+
 #### 3. **Websocket client (CDSP - knowledge layer)**:
 
 - Knowledge Layer configuration needs to be added to the `.env` file, like described at [Knowledge Layer Readme](../cdsp/knowledge-layer/README.md#websocket-server-and-rdfox-configuration)
-- Keep in mind that the default values for **HOST_WEBSOCKET_SERVER** and **HOST_REASONER_SERVER** are designed for accessing all services running natively on the same machine. But this guide focuses on running all services in separate docker containers, so the host variables needs to reflect the container names. In this case the environment variables should look like this:
+- Keep in mind that the default values for **HOST_WEBSOCKET_SERVER** and **HOST_REASONER_SERVER** are designed for accessing all services running natively on the same machine. But this guide focuses on running all services in separate docker containers, so the host variables needs to reflect the container names. `HOST_REASONER_SERVER` depends on which reasoner profile you use: `rdfox-service` for the `rdfox` profile, or `rdf4j-stream-reasoner-service` for the `rdf4j` profile. In this case the environment variables should look like this:
 
 ```text
 # schema REQUIRED_VSS_DATA_POINTS_FILE is the TXT file containing the required data points
@@ -243,6 +261,7 @@ REQUIRED_VSS_DATA_POINTS_FILE=vss_data_required.txt
 
 HOST_WEBSOCKET_SERVER="information-layer"
 PORT_WEBSOCKET_SERVER="8080"
+# Use "rdfox-service" with the rdfox profile, or "rdf4j-stream-reasoner-service" with the rdf4j profile
 HOST_REASONER_SERVER="rdfox-service"
 PORT_REASONER_SERVER="12110"
 # The following are the default Base64-encoded string of the RDFox credentials configured in the /docker/docker-compose-cdsp.yml file
@@ -252,14 +271,22 @@ REASONER_DATASTORE_NAME="ds-test"
 VEHICLE_OBJECT_ID="VINABCD1234567890"
 ```
 
-Use the following commands to start knowledge layer:
+Use the following commands to start the knowledge layer with the reasoner of your choice (the service name matches the profile: `knowledge-layer-rdfox` or `knowledge-layer-rdf4j`):
 
 ```shell
-$ sudo docker compose -f docker-compose-cdsp.yml up -d knowledge-layer
+$ sudo docker compose -f docker-compose-cdsp.yml --profile rdfox up -d knowledge-layer-rdfox
 # ...
 # [+] Running 2/2
-# ✔ knowledge-layer             Created
-# ✔ Container knowledge-layer   Started
+# ✔ knowledge-layer-rdfox             Created
+# ✔ Container knowledge-layer         Started
+```
+
+```shell
+$ sudo docker compose -f docker-compose-cdsp.yml --profile rdf4j up -d knowledge-layer-rdf4j
+# ...
+# [+] Running 2/2
+# ✔ knowledge-layer-rdf4j             Created
+# ✔ Container knowledge-layer         Started
 ```
 
 #### Tip: Corporate CA security (download error "tls: failed to verify certificate:")
@@ -294,10 +321,27 @@ RUN update-ca-certificates
 
 ### Start/stop containers
 
-Start the containers:
+The reasoner services (`rdfox-init`, `rdfox-service`, `rdf4j-stream-reasoner-service`) and the corresponding `knowledge-layer-rdfox` / `knowledge-layer-rdf4j` service are gated behind the `rdfox` and `rdf4j` [profiles](https://docs.docker.com/compose/how-tos/profiles/), so a profile must be selected with `--profile` to start them.
+
+Start the containers with the open-source RDF4J reasoner:
 
 ```shell
-$ sudo docker compose -f docker-compose-cdsp.yml up -d
+$ sudo docker compose -f docker-compose-cdsp.yml --profile rdf4j up -d
+# [+] Running 4/5
+#  ⠴ Network cdsp_default               Created
+#  ✔ Container vissr_container_volumes  Started
+#  ✔ Container iotdb-service            Started
+#  ✔ Container app_redis                Started
+#  ✔ Container vissv2server             Started
+#  ✔ Container rdf4j-stream-reasoner-service   Started
+#  ✔ Container information-layer        Started
+#  ✔ Container knowledge-layer          Started
+```
+
+Or with the licensed RDFox reasoner:
+
+```shell
+$ sudo docker compose -f docker-compose-cdsp.yml --profile rdfox up -d
 # [+] Running 4/5
 #  ⠴ Network cdsp_default               Created
 #  ✔ Container vissr_container_volumes  Started
@@ -314,26 +358,24 @@ $ sudo docker compose -f docker-compose-cdsp.yml up -d
 Sometimes a service might not start up successfully when all are started with a single docker compose command. The reason for this are racing conditions between service startups, that docker has no control over.
 An easy fix can be to run the same startup command again.
 
-Stop and remove the containers:
+Stop and remove the containers (use the same `--profile` flag you started with):
 
 ```shell
-$ sudo docker compose -f docker-compose-cdsp.yml down
+$ sudo docker compose -f docker-compose-cdsp.yml --profile rdf4j down
 # [+] Running 5/5
 #  ✔ Container vissv2server             Removed
 #  ✔ Container app_redis                Removed
 #  ✔ Container iotdb-service            Removed
 #  ✔ Container vissr_container_volumes  Removed
-#  ✔ Container rdfox-service            Removed
-#  ✔ Container rdfox-init               Removed
+#  ✔ Container rdf4j-stream-reasoner-service   Removed
 #  ✔ Container information-layer        Removed
 #  ✔ Container knowledge-layer          Removed
-#  ✔ Container rdfox-service            Removed
 #  ✔ Network cdsp_default               Removed
 ```
 
 ### Expected Result
 
-Listing should show six running containers as shown below:
+Listing should show six running containers as shown below (example using the `rdfox` profile):
 
 ```shell
 $ sudo docker ps
@@ -350,6 +392,7 @@ CONTAINER ID   IMAGE                         COMMAND                  CREATED   
 ```
 
 #### Apache IoTDB
+
 
 You can confirm the Apache IoTDB server is running by connecting to it with the IoTDB CLI client (_quit_ to exit the client):
 

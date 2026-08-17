@@ -100,4 +100,8 @@ Derived output data:
 
 ---
 
+## Acknowledgements
+
+Thanks to [David Hoermann](mailto:david.hoermann@campus.tu-berlin.de) for evaluating CDSP, proposing the RDF4J integration approach, and providing the RDF4J rules and queries used by this example.
+
 Feel free to explore the components and rules used in this "Hello World" example to understand the basic implementation of the Knowledge Layer. You can extend this use case to more complex scenarios and even adapt it to different domains.
